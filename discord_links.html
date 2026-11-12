@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Discord 群组链接 · 社么东西</title>
+<style>
+  :root{--bg:#F5F6F7;--card:#fff;--line:#E5E6EB;--txt:#1D2129;--sub:#86909C;--pri:#3370FF;--ok:#00B42A;--warn:#FF7D00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:13px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1240px;margin:0 auto;padding:20px 24px 48px}
+  .head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .head img{width:28px;height:28px;border-radius:8px}
+  .head h1{font-size:16px;margin:0;font-weight:600}
+  .head .sp{flex:1}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;text-decoration:none;color:var(--txt)}
+  .btn.primary{background:var(--pri);border-color:var(--pri);color:#fff}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .card .k{color:var(--sub);font-size:12px}
+  .card .v{font-size:22px;font-weight:700;margin-top:4px}
+  .toolbar{display:flex;gap:8px;margin-bottom:12px}
+  input[type=search]{flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;background:#fff}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:#FAFBFC;color:var(--sub);font-weight:500;font-size:12px;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  .code{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+  .kw{display:inline-block;background:#E8F3FF;color:#3370FF;border-radius:6px;padding:1px 8px;font-size:12px}
+  .src{color:var(--sub);font-size:12px}
+  .ctx{color:var(--sub);font-size:12px;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .empty{padding:40px;text-align:center;color:var(--sub);background:#fff;border:1px solid var(--line);border-radius:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <img src="/icons/icon32.png" alt="">
+    <h1>Discord 群组链接</h1>
+    <span class="sp"></span>
+    <a class="btn" href="/">返回看板</a>
+    <button class="btn primary" id="btnReload">刷新</button>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="k">已采集链接</div><div class="v" id="kTotal">—</div></div>
+    <div class="card"><div class="k">去重邀请码</div><div class="v" id="kCodes">—</div></div>
+    <div class="card"><div class="k">关键词覆盖</div><div class="v" id="kKw">—</div></div>
+    <div class="card"><div class="k">Discord 群组覆盖（已加入）</div><div class="v" id="kCover">—</div></div>
+  </div>
+
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="搜索 关键词 / 邀请码 / 标题 / 上下文">
+  </div>
+
+  <table id="tb">
+    <thead><tr><th style="width:130px">发现时间</th><th style="width:110px">关键词</th><th style="width:170px">邀请码</th><th>标题 / 上下文</th><th style="width:120px">来源</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="empty" id="empty" style="display:none">还没有采集到链接。先跑 `disc_collect.ps1`。</div>
+</div>
+
+<script src="/src_discord.js"></script>
+</body>
+</html>

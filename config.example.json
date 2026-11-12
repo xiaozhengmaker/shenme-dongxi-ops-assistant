@@ -1,0 +1,776 @@
+{
+    "feishu":  {
+                   "app_id":  "cli_xxxxxxxxxxxxxxxx",
+                   "app_secret":  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                   "base_app_token":  "bascnxxxxxxxxxxxxxxxxxxxxxx",
+                   "table_id":  "tblxxxxxxxxxxxxxx",
+                   "table_name":  "私域社群表",
+                   "wiki_url":  "https://\u003cyour-tenant\u003e.feishu.cn/wiki/\u003cwiki_token\u003e?table=\u003ctable_id\u003e\u0026view=\u003cview_id\u003e",
+                   "webhook":  "https://open.feishu.cn/open-apis/bot/v2/hook/\u003chook-id\u003e"
+               },
+    "platforms":  [
+                      "Facebook",
+                      "Telegram",
+                      "Discord",
+                      "Reddit",
+                      "WhatsApp",
+                      "Instagram",
+                      "Steam"
+                  ],
+    "quotas":  {
+                   "Facebook":  5,
+                   "Telegram":  20,
+                   "Discord":  0,
+                   "Reddit":  3,
+                   "WhatsApp":  2,
+                   "Instagram":  0,
+                   "Steam":  4
+               },
+    "filters":  {
+                    "min_members":  {
+                                        "Facebook":  1000,
+                                        "Telegram":  300,
+                                        "Discord":  500,
+                                        "Reddit":  1000
+                                    },
+                    "recent_activity_days":  7,
+                    "preferred_languages":  [
+                                                "en"
+                                            ],
+                    "skip_verification":  true,
+                    "exclude_keywords":  [
+                                             "valORANT",
+                                             "Roblox",
+                                             "Gartic",
+                                             "Quizcord",
+                                             "MEE6",
+                                             "OwO Bot",
+                                             "Discord Bots",
+                                             "Discord Town Hall",
+                                             "IlloJuan",
+                                             "Polymarket",
+                                             "Gartic"
+                                         ],
+                    "cs2_keywords":  [
+                                         "cs2",
+                                         "csgo",
+                                         "cs:go",
+                                         "counter-strike",
+                                         "counterstrike",
+                                         "skin",
+                                         "case",
+                                         "trade",
+                                         "market",
+                                         "gamble",
+                                         "roulette",
+                                         "upgrade",
+                                         "inspect",
+                                         "drop",
+                                         "giveaway",
+                                         "scrim",
+                                         "pracc",
+                                         "faceit",
+                                         "premier",
+                                         "pug",
+                                         "lounge",
+                                         "battle",
+                                         "opening",
+                                         "开箱",
+                                         "皮肤",
+                                         "电竞",
+                                         "陪玩"
+                                     ],
+                    "exclude_title_regex":  "(?i)(airdrop|pixelverse|xdao|earn|shop|магазин|news|bot|1\\.6)",
+                    "min_floor":  {
+                                      "Facebook":  300,
+                                      "Telegram":  50,
+                                      "Discord":  200,
+                                      "Reddit":  200
+                                  }
+                },
+    "report":  {
+                   "title":  "📊 社群日报",
+                   "platform_order":  [
+                                          "Facebook",
+                                          "Telegram",
+                                          "Discord",
+                                          "Reddit",
+                                          "Steam",
+                                          "WhatsApp"
+                                      ],
+                   "card_color":  "indigo",
+                   "wan_threshold":  10000,
+                   "k_threshold":  1000,
+                   "decimals":  1,
+                   "show_invalid_row":  true,
+                   "show_write_status":  true
+               },
+    "paths":  {
+                  "workdir":  "\u003crepo-dir\u003e",
+                  "chrome":  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                  "chrome_debug_profile":  "%LOCALAPPDATA%\\GroupOps\\chrome-profile",
+                  "telegram_desktop":  "",
+                  "cdp_port":  9222
+              },
+    "queries":  {
+
+                },
+    "reserved":  [
+                     "Reddit"
+                 ],
+    "outputs":  {
+                    "feishu":  true,
+                    "sqlite":  false,
+                    "csv":  false,
+                    "jsonl":  false
+                },
+    "schedule":  {
+                     "enabled":  true,
+                     "time":  "10:00"
+                 },
+    "strategy":  {
+                     "Facebook":  {
+                                      "filters":  {
+                                                      "min_members":  500,
+                                                      "languages":  [
+                                                                        "en"
+                                                                    ],
+                                                      "require_public":  true,
+                                                      "recent_activity_days":  7,
+                                                      "must_include":  [
+
+                                                                       ],
+                                                      "exclude_regex":  "(?i)(airdrop|pixelverse|xdao|earn|shop|магазин|news|bot|1\\.6)"
+                                                  },
+                                      "discovery":  {
+                                                        "keywords":  [
+                                                                         "cs2 usa",
+                                                                         "cs2 canada",
+                                                                         "cs2 uk",
+                                                                         "cs2 australia",
+                                                                         "csgo usa",
+                                                                         "counter strike 2 trading group",
+                                                                         "cs2 skins trading group",
+                                                                         "cs2 community usa",
+                                                                         "cs2 trade",
+                                                                         "csgo trading",
+                                                                         "cs2 turkey",
+                                                                         "cs2 indonesia",
+                                                                         "cs2 vietnam",
+                                                                         "cs2 arab",
+                                                                         "cs2 poland",
+                                                                         "cs2 philippines",
+                                                                         "skinsmonkey",
+                                                                         "csgoroll",
+                                                                         "clove skins",
+                                                                         "dmarket",
+                                                                         "buff163",
+                                                                         "csgoempire",
+                                                                         "case opening",
+                                                                         "skin trade",
+                                                                         "cs2 marketplace",
+                                                                         "csgo betting",
+                                                                         "cs2 giveaway",
+                                                                         "cs2 trading"
+                                                                     ],
+                                                        "sources":  [
+                                                                        {
+                                                                            "name":  "internal",
+                                                                            "label":  "站内群搜索",
+                                                                            "query_template":  "https://www.facebook.com/search/groups/?q={kw}",
+                                                                            "priority":  1,
+                                                                            "limit":  30,
+                                                                            "enabled":  true
+                                                                        },
+                                                                        {
+                                                                            "name":  "external",
+                                                                            "label":  "外部搜索（site:facebook.com/groups）",
+                                                                            "query_template":  "site:facebook.com/groups {kw}",
+                                                                            "priority":  2,
+                                                                            "limit":  20,
+                                                                            "enabled":  true
+                                                                        },
+                                                                        {
+                                                                            "name":  "seeds",
+                                                                            "label":  "种子清单（暂不支持）",
+                                                                            "query_template":  "",
+                                                                            "priority":  3,
+                                                                            "limit":  0,
+                                                                            "enabled":  false
+                                                                        }
+                                                                    ],
+                                                        "last_external_hits":  0,
+                                                        "last_external_at":  "",
+                                                        "usePool":  false
+                                                    },
+                                      "pacing":  {
+                                                     "interval_min":  45,
+                                                     "interval_max":  180,
+                                                     "search_delay_min":  3,
+                                                     "search_delay_max":  8,
+                                                     "max_consecutive_fail":  3,
+                                                     "flood_pad_sec":  20,
+                                                     "quota":  0
+                                                 },
+                                      "kinds":  [
+                                                    "public_group"
+                                                ],
+                                      "join":  {
+                                                   "mode":  "click_join",
+                                                   "skip_if_private":  true,
+                                                   "skip_if_approval":  true
+                                               },
+                                      "entry":  {
+                                                    "type":  "fb_group_search"
+                                                }
+                                  },
+                     "Telegram":  {
+                                      "filters":  {
+                                                      "min_members":  300,
+                                                      "languages":  [
+                                                                        "en",
+                                                                        "ru"
+                                                                    ],
+                                                      "require_public":  true,
+                                                      "recent_activity_days":  7,
+                                                      "must_include":  [
+
+                                                                       ],
+                                                      "exclude_regex":  "(?i)(airdrop|pixelverse|xdao|earn|shop|магазин|news|bot|1\\.6)"
+                                                  },
+                                      "discovery":  {
+                                                        "keywords":  [
+                                                                         "csgo chat",
+                                                                         "cs2 trade",
+                                                                         "csgo trading",
+                                                                         "cs2 skins",
+                                                                         "cs2 market",
+                                                                         "cs2 community",
+                                                                         "cs2 chat",
+                                                                         "кс 2 чат",
+                                                                         "cs2 поиск игроков",
+                                                                         "csgo trade",
+                                                                         "cs2 cases",
+                                                                         "csgo cases",
+                                                                         "cs2 giveaway",
+                                                                         "csgo giveaway",
+                                                                         "cs2 betting",
+                                                                         "csgo betting",
+                                                                         "cs2 faceit",
+                                                                         "cs2 premier",
+                                                                         "cs2 lounge",
+                                                                         "csgo lounge",
+                                                                         "скины кс2",
+                                                                         "трейд кс2",
+                                                                         "ксго чат",
+                                                                         "csgo brasil",
+                                                                         "cs2 brasil",
+                                                                         "cs2 trocas",
+                                                                         "csgo troca",
+                                                                         "csgo suomi",
+                                                                         "cs2 deutsch",
+                                                                         "csgo polska",
+                                                                         "cs2 ukraine",
+                                                                         "cs2 turkey",
+                                                                         "cs2 philippines",
+                                                                         "cs2 asia",
+                                                                         "cs2 india",
+                                                                         "csgo latam",
+                                                                         "cs2 arab",
+                                                                         "cs2 usa",
+                                                                         "cs2 canada",
+                                                                         "cs2 uk"
+                                                                     ],
+                                                        "sources":  [
+                                                                        {
+                                                                            "name":  "internal",
+                                                                            "label":  "站内群搜索（MTProto）",
+                                                                            "query_template":  "{kw}",
+                                                                            "priority":  3,
+                                                                            "limit":  30,
+                                                                            "enabled":  true
+                                                                        },
+                                                                        {
+                                                                            "name":  "seeds",
+                                                                            "label":  "种子清单 t.me 链接",
+                                                                            "query_template":  "{kw}",
+                                                                            "priority":  2,
+                                                                            "limit":  50,
+                                                                            "enabled":  true
+                                                                        },
+                                                                        {
+                                                                            "name":  "external",
+                                                                            "label":  "外部搜索（Bing/Google 找 t.me）",
+                                                                            "query_template":  "{kw} t.me",
+                                                                            "priority":  1,
+                                                                            "limit":  20,
+                                                                            "enabled":  true
+                                                                        }
+                                                                    ],
+                                                        "last_external_hits":  0,
+                                                        "last_external_at":  "",
+                                                        "usePool":  false
+                                                    },
+                                      "pacing":  {
+                                                     "interval_min":  45,
+                                                     "interval_max":  180,
+                                                     "search_delay_min":  3,
+                                                     "search_delay_max":  8,
+                                                     "max_consecutive_fail":  3,
+                                                     "flood_pad_sec":  20,
+                                                     "quota":  0
+                                                 },
+                                      "kinds":  [
+                                                    "group",
+                                                    "channel"
+                                                ],
+                                      "join":  {
+                                                   "mode":  "api_join",
+                                                   "skip_if_approval":  true
+                                               },
+                                      "entry":  {
+                                                    "type":  "mtproto_search"
+                                                }
+                                  },
+                     "Discord":  {
+                                     "filters":  {
+                                                     "min_members":  500,
+                                                     "languages":  [
+                                                                       "en"
+                                                                   ],
+                                                     "require_public":  true,
+                                                     "recent_activity_days":  7,
+                                                     "must_include":  [
+
+                                                                      ],
+                                                     "exclude_regex":  "(?i)(airdrop|pixelverse|xdao|earn|shop|магазин|news|bot|1\\.6)"
+                                                 },
+                                     "discovery":  {
+                                                       "keywords":  [
+                                                                        "cs2",
+                                                                        "csgo",
+                                                                        "counterstrike",
+                                                                        "cs2trade",
+                                                                        "cs2skins",
+                                                                        "csgo trade",
+                                                                        "cs2 cases",
+                                                                        "faceit"
+                                                                    ],
+                                                       "sources":  [
+                                                                       {
+                                                                           "name":  "discordme_tag",
+                                                                           "label":  "discord.me 标签页",
+                                                                           "url_template":  "https://discord.me/servers/tag/{kw}",
+                                                                           "enabled":  true,
+                                                                           "limit":  200
+                                                                       },
+                                                                       {
+                                                                           "name":  "discordme_search",
+                                                                           "label":  "discord.me 搜索",
+                                                                           "url_template":  "https://discord.me/search?q={kw}",
+                                                                           "enabled":  false,
+                                                                           "limit":  200
+                                                                       }
+                                                                   ],
+                                                       "last_external_hits":  0,
+                                                       "last_external_at":  "",
+                                                       "usePool":  false
+                                                   },
+                                     "pacing":  {
+                                                    "interval_min":  45,
+                                                    "interval_max":  180,
+                                                    "search_delay_min":  3,
+                                                    "search_delay_max":  8,
+                                                    "max_consecutive_fail":  3,
+                                                    "flood_pad_sec":  20,
+                                                    "quota":  0
+                                                },
+                                     "kinds":  [
+                                                   "server"
+                                               ],
+                                     "join":  {
+                                                  "mode":  "click_invite"
+                                              },
+                                     "entry":  {
+                                                   "type":  "invite_only"
+                                               }
+                                 },
+                     "Reddit":  {
+                                    "filters":  {
+                                                    "min_members":  1000,
+                                                    "languages":  [
+                                                                      "en"
+                                                                  ],
+                                                    "require_public":  true,
+                                                    "recent_activity_days":  7,
+                                                    "must_include":  [
+
+                                                                     ],
+                                                    "exclude_regex":  "(?i)(airdrop|pixelverse|xdao|earn|shop|магазин|news|bot|1\\.6)",
+                                                    "min_subscribers":  10000,
+                                                    "recent_posts_7d":  3,
+                                                    "require_allow_promo":  false
+                                                },
+                                    "discovery":  {
+                                                      "keywords":  [
+                                                                       "r/GlobalOffensive",
+                                                                       "r/csgo",
+                                                                       "cs2 skins",
+                                                                       "csgo trade",
+                                                                       "csgo trading",
+                                                                       "cs2 trading",
+                                                                       "cs2 trade",
+                                                                       "csgo skins",
+                                                                       "counter strike trade",
+                                                                       "cs2 cases",
+                                                                       "csgo cases",
+                                                                       "skin gambling",
+                                                                       "cs2 giveaway",
+                                                                       "faceit",
+                                                                       "premier cs2",
+                                                                       "csgo market",
+                                                                       "cs2 community",
+                                                                       "csgo community",
+                                                                       "cs2 investing",
+                                                                       "csgo betting"
+                                                                   ],
+                                                      "sources":  [
+                                                                      {
+                                                                          "name":  "internal",
+                                                                          "label":  "subreddit 搜索",
+                                                                          "query_template":  "https://www.reddit.com/subreddits/search?q={kw}",
+                                                                          "priority":  1,
+                                                                          "limit":  30,
+                                                                          "enabled":  true
+                                                                      },
+                                                                      {
+                                                                          "name":  "external",
+                                                                          "label":  "外部搜索（site:reddit.com）",
+                                                                          "query_template":  "site:reddit.com {kw}",
+                                                                          "priority":  2,
+                                                                          "limit":  20,
+                                                                          "enabled":  true
+                                                                      },
+                                                                      {
+                                                                          "name":  "seeds",
+                                                                          "label":  "手写 r/ 清单",
+                                                                          "query_template":  "{kw}",
+                                                                          "priority":  3,
+                                                                          "limit":  50,
+                                                                          "enabled":  true
+                                                                      }
+                                                                  ],
+                                                      "last_external_hits":  0,
+                                                      "last_external_at":  "",
+                                                      "usePool":  false
+                                                  },
+                                    "pacing":  {
+                                                   "interval_min":  45,
+                                                   "interval_max":  180,
+                                                   "search_delay_min":  3,
+                                                   "search_delay_max":  8,
+                                                   "max_consecutive_fail":  3,
+                                                   "flood_pad_sec":  20,
+                                                   "quota":  0
+                                               },
+                                    "kinds":  [
+                                                  "subreddit"
+                                              ],
+                                    "join":  {
+                                                 "mode":  "subscribe"
+                                             },
+                                    "entry":  {
+                                                  "type":  "subreddit_search"
+                                              }
+                                },
+                     "WhatsApp":  {
+                                      "discovery":  {
+                                                        "sources":  [
+                                                                        {
+                                                                            "name":  "internal",
+                                                                            "label":  "站内搜索（WhatsApp 无群搜索）",
+                                                                            "query_template":  "",
+                                                                            "priority":  3,
+                                                                            "limit":  0,
+                                                                            "enabled":  false
+                                                                        },
+                                                                        {
+                                                                            "name":  "seeds",
+                                                                            "label":  "邀请链接清单 chat.whatsapp.com",
+                                                                            "query_template":  "",
+                                                                            "priority":  1,
+                                                                            "limit":  10,
+                                                                            "enabled":  true
+                                                                        },
+                                                                        {
+                                                                            "name":  "external",
+                                                                            "label":  "外部搜索（拿不到稳定直链）",
+                                                                            "query_template":  "{kw} chat.whatsapp.com",
+                                                                            "priority":  2,
+                                                                            "limit":  0,
+                                                                            "enabled":  false
+                                                                        }
+                                                                    ],
+                                                        "usePool":  false,
+                                                        "keywords":  [
+
+                                                                     ]
+                                                    },
+                                      "filters":  {
+                                                      "min_members":  300
+                                                  },
+                                      "kinds":  [
+                                                    "group"
+                                                ],
+                                      "join":  {
+                                                   "mode":  "click_invite",
+                                                   "max_per_day":  3,
+                                                   "gap_min":  600,
+                                                   "stop_on_verify":  true
+                                               },
+                                      "entry":  {
+                                                    "type":  "invite_only"
+                                                },
+                                      "pacing":  {
+                                                     "interval_min":  45,
+                                                     "interval_max":  180,
+                                                     "search_delay_min":  3,
+                                                     "search_delay_max":  8,
+                                                     "max_consecutive_fail":  3,
+                                                     "flood_pad_sec":  20,
+                                                     "quota":  0
+                                                 }
+                                  },
+                     "Steam":  {
+                                   "filters":  {
+                                                   "min_members":  200,
+                                                   "languages":  [
+                                                                     "en"
+                                                                 ],
+                                                   "require_public":  true,
+                                                   "recent_activity_days":  7,
+                                                   "must_include":  "",
+                                                   "exclude_regex":  "(?i)(csgo.{0,3}giveaway|free skins|clickbait)"
+                                               },
+                                   "discovery":  {
+                                                     "keywords":  [
+                                                                      "cs2",
+                                                                      "csgo",
+                                                                      "counter-strike",
+                                                                      "cs2 trade",
+                                                                      "csgo trade",
+                                                                      "cs2 skins",
+                                                                      "skin trading",
+                                                                      "faceit",
+                                                                      "premier"
+                                                                  ],
+                                                     "usePool":  false,
+                                                     "sources":  [
+                                                                     {
+                                                                         "name":  "internal",
+                                                                         "label":  "Steam 群组搜索",
+                                                                         "query_template":  "https://steamcommunity.com/search/groups/?text={kw}",
+                                                                         "priority":  1,
+                                                                         "limit":  30,
+                                                                         "enabled":  true
+                                                                     },
+                                                                     {
+                                                                         "name":  "external",
+                                                                         "label":  "外部搜索 (site:steamcommunity.com/groups)",
+                                                                         "query_template":  "site:steamcommunity.com/groups {kw}",
+                                                                         "priority":  2,
+                                                                         "limit":  20,
+                                                                         "enabled":  true
+                                                                     },
+                                                                     {
+                                                                         "name":  "seeds",
+                                                                         "label":  "种子清单 (steamcommunity.com/groups/\u003c名字\u003e)",
+                                                                         "query_template":  "{kw}",
+                                                                         "priority":  3,
+                                                                         "limit":  50,
+                                                                         "enabled":  true
+                                                                     }
+                                                                 ]
+                                                 },
+                                   "pacing":  {
+                                                  "interval_min":  60,
+                                                  "interval_max":  180,
+                                                  "search_delay_min":  5,
+                                                  "search_delay_max":  10,
+                                                  "max_consecutive_fail":  3,
+                                                  "flood_pad_sec":  30,
+                                                  "quota":  0
+                                              }
+                               }
+                 },
+    "alerts":  {
+                   "enabled":  true,
+                   "webhook":  "",
+                   "fallback_to_main":  true,
+                   "probe_seconds":  60,
+                   "probe_fail_threshold":  3,
+                   "notify_on":  [
+                                     "probe_fail",
+                                     "quota_short",
+                                     "flood_wait",
+                                     "run_done"
+                                 ]
+               },
+    "platformsEnabled":  {
+                             "Facebook":  true,
+                             "Telegram":  true,
+                             "Discord":  true,
+                             "Reddit":  true,
+                             "WhatsApp":  true,
+                             "Instagram":  false,
+                             "Steam":  true
+                         },
+    "behaviors":  {
+                      "Facebook":  {
+                                       "discover":  true,
+                                       "join":  true,
+                                       "members":  true
+                                   },
+                      "Telegram":  {
+                                       "discover":  true,
+                                       "join":  true,
+                                       "members":  true
+                                   },
+                      "Discord":  {
+                                      "discover":  true,
+                                      "join":  false,
+                                      "members":  false
+                                  },
+                      "Reddit":  {
+                                     "discover":  true,
+                                     "join":  true,
+                                     "members":  true
+                                 },
+                      "WhatsApp":  {
+                                       "discover":  false,
+                                       "join":  true,
+                                       "members":  true
+                                   },
+                      "Instagram":  {
+                                        "discover":  false,
+                                        "join":  false,
+                                        "members":  false
+                                    },
+                      "Steam":  {
+                                    "discover":  true,
+                                    "join":  true,
+                                    "members":  true
+                                }
+                  },
+    "notify":  {
+                   "channels":  {
+                                    "main":  "https://open.feishu.cn/open-apis/bot/v2/hook/\u003cmain-hook-id\u003e",
+                                    "ops":  ""
+                                },
+                   "platforms":  {
+                                     "Facebook":  {
+                                                      "daily":  true,
+                                                      "done":  false,
+                                                      "alerts":  true
+                                                  },
+                                     "Telegram":  {
+                                                      "daily":  true,
+                                                      "done":  true,
+                                                      "alerts":  true
+                                                  },
+                                     "Discord":  {
+                                                     "daily":  true,
+                                                     "done":  false,
+                                                     "alerts":  true
+                                                 },
+                                     "Reddit":  {
+                                                    "daily":  true,
+                                                    "done":  false,
+                                                    "alerts":  true
+                                                },
+                                     "WhatsApp":  {
+                                                      "daily":  true,
+                                                      "done":  false,
+                                                      "alerts":  true
+                                                  },
+                                     "Instagram":  {
+                                                       "daily":  true,
+                                                       "done":  false,
+                                                       "alerts":  true
+                                                   },
+                                     "Steam":  {
+                                                   "daily":  true,
+                                                   "done":  false,
+                                                   "alerts":  true
+                                               }
+                                 },
+                   "fallback_to_main":  true
+               },
+    "keywordPool":  [
+                        "csgo chat",
+                        "cs2 chat",
+                        "csgo trade",
+                        "cs2 trade",
+                        "csgo trading",
+                        "cs2 trading",
+                        "cs2 skins",
+                        "csgo skins",
+                        "csgo market",
+                        "cs2 community",
+                        "csgo community",
+                        "cs2 cases",
+                        "csgo cases",
+                        "cs2 giveaway",
+                        "csgo giveaway",
+                        "cs2 betting",
+                        "csgo betting",
+                        "cs2 faceit",
+                        "cs2 premier",
+                        "cs2 lounge",
+                        "csgo lounge",
+                        "кс 2 чат",
+                        "ксго чат",
+                        "скины кс2",
+                        "трейд кс2",
+                        "csgo brasil",
+                        "cs2 brasil",
+                        "cs2 trocas",
+                        "csgo troca",
+                        "csgo suomi",
+                        "cs2 deutsch",
+                        "csgo polska",
+                        "cs2 ukraine",
+                        "cs2 turkey",
+                        "cs2 philippines",
+                        "csgo asia",
+                        "cs2 india",
+                        "csgo latam",
+                        "cs2 arab",
+                        "cs2 usa",
+                        "csgo usa",
+                        "cs2 canada",
+                        "csgo canada",
+                        "cs2 uk",
+                        "csgo uk",
+                        "cs2 australia",
+                        "csgo australia",
+                        "cs2 ireland",
+                        "cs2 new zealand",
+                        "cs2 skins trading",
+                        "counter strike 2 trading group",
+                        "cs2 buy sell trade",
+                        "csgo buy sell trade",
+                        "cs2 marketplace",
+                        "cs2 community usa",
+                        "csgo community us",
+                        "cs2 south africa",
+                        "cs2 singapore",
+                        "cs2 europe skins"
+                    ],
+    "db":  {
+               "enabled":  true,
+               "path":  "data/groupops.db",
+               "python":  "",
+               "auto_import":  true
+           }
+}

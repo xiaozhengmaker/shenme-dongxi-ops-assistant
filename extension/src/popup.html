@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<style>
+  body { width: 300px; font: 13px/1.5 system-ui, "Segoe UI", sans-serif; margin: 0; padding: 12px; color: #1f2329; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  .row { display: flex; gap: 8px; margin: 8px 0; }
+  button { flex: 1; padding: 7px 0; border: 0; border-radius: 6px; background: #1664ff; color: #fff; cursor: pointer; font-size: 13px; }
+  button.ghost { background: #eef1f5; color: #1f2329; }
+  button:disabled { opacity: .5; cursor: default; }
+  .stat { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed #e5e8ee; }
+  .muted { color: #8a919b; font-size: 12px; }
+  #log { margin-top: 8px; font-size: 12px; color: #5c6470; word-break: break-all; }
+</style>
+</head>
+<body>
+  <h1>社群运营助手 · GroupOps</h1>
+  <div class="stat"><span>状态</span><b id="state">未运行</b></div>
+  <div class="stat"><span>今日已加入</span><b id="joined">0</b></div>
+  <div class="stat"><span>跳过 / 失败</span><b id="bad">0 / 0</b></div>
+  <div class="row">
+    <button id="start">开始</button>
+    <button id="stop" class="ghost">停止</button>
+  </div>
+  <div class="row"><button id="opts" class="ghost">策略配置</button></div>
+  <div id="log" class="muted"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

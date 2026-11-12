@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>社群运营助手 · GroupOps · 策略配置</title>
+<style>
+  body { font: 13px/1.6 system-ui, "Segoe UI", sans-serif; margin: 24px; color: #1f2329; max-width: 900px; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .muted { color: #8a919b; font-size: 12px; margin-bottom: 12px; }
+  textarea { width: 100%; height: 460px; font: 12px/1.5 ui-monospace, Consolas, monospace; padding: 10px;
+             border: 1px solid #d6dae1; border-radius: 8px; box-sizing: border-box; }
+  .row { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+  button { padding: 7px 14px; border: 0; border-radius: 6px; background: #1664ff; color: #fff; cursor: pointer; }
+  button.ghost { background: #eef1f5; color: #1f2329; }
+  #msg { font-size: 12px; color: #128a3f; }
+  #msg.err { color: #d93026; }
+</style>
+</head>
+<body>
+  <h1>策略配置</h1>
+  <div class="muted">改完点保存立即生效；点「导出 config.json」会下载同名文件，供本地 hub / 交接用。</div>
+  <textarea id="cfg" spellcheck="false"></textarea>
+  <div class="row">
+    <button id="save">保存</button>
+    <button id="export" class="ghost">导出 config.json</button>
+    <button id="reset" class="ghost">恢复默认</button>
+    <span id="msg"></span>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

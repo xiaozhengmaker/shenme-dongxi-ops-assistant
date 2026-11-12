@@ -1,0 +1,4 @@
+﻿# WhatsApp 群邀请链接（一行一条）
+# 格式：https://chat.whatsapp.com/xxxxxxxxxxxxx
+# 可加备注：链接 # 群名备注
+# 说明：WhatsApp 无法在应用内搜索群，只能靠邀请链接进入。

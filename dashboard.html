@@ -1,0 +1,782 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>社么东西 · 社群运营助手</title>
+<style>
+  :root{
+    --bg:#F5F6F7;--card:#fff;--line:#E5E6EB;--line2:#F0F1F2;
+    --t1:#1F2329;--t2:#646A73;--t3:#8F959E;
+    --blue:#3370FF;--blue-l:#E8F0FF;--green:#34C724;--orange:#FF8800;--red:#F54A45;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--t1);
+    font:14px/1.5 "PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .app{max-width:1180px;margin:0 auto;padding:0 20px 48px}
+  .top{position:sticky;top:0;z-index:9;display:flex;align-items:center;gap:12px;
+    background:rgba(255,255,255,.94);backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);padding:12px 4px;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15.5px}
+  .logo{width:26px;height:26px;border-radius:7px;background:var(--blue);display:grid;place-items:center;color:#fff}
+  .spacer{flex:1}
+  .iconbtn{width:30px;height:30px;border-radius:6px;border:1px solid transparent;display:grid;
+    place-items:center;color:var(--t2);cursor:pointer;background:none}
+  .iconbtn:hover{background:#F2F3F5}
+  .btn{height:32px;padding:0 14px;border-radius:6px;border:1px solid var(--line);background:#fff;
+    color:var(--t1);font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .btn:hover{background:#F7F8FA}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.primary:hover{background:#4E83FD}
+  .sec{margin-bottom:16px}
+  .sec-h{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:13px;color:var(--t2)}
+  .sec-h b{color:var(--t1);font-size:14px;font-weight:600}
+  .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .pcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 13px;
+    cursor:pointer;transition:.15s;min-height:104px}
+  .pcard:hover{box-shadow:0 2px 10px rgba(31,35,41,.07)}
+  .pcard.sel{border-color:var(--blue);background:linear-gradient(180deg,#F7FAFF,#fff);
+    box-shadow:0 0 0 2px rgba(51,112,255,.10)}
+  .pcard.nodata{opacity:.55}
+  .pc-top{display:flex;align-items:center;gap:9px}
+  .pico{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:#fff;flex:0 0 auto}
+  .pc-name{font-size:13.5px;font-weight:600}
+  .pc-check{margin-left:auto;width:16px;height:16px;border-radius:4px;border:1.5px solid #C9CDD4;
+    display:grid;place-items:center;color:#fff;font-size:11px}
+  .pcard.sel .pc-check{background:var(--blue);border-color:var(--blue)}
+  .pc-num{display:flex;align-items:baseline;gap:6px;margin-top:10px}
+  .pc-num .v{font-size:21px;font-weight:700}
+  .pc-num .u{font-size:11px;color:var(--t3)}
+  .pcard:not(.sel) .pc-num .v{color:var(--t3)}
+  .pc-meta{font-size:11.5px;color:var(--t2);margin-top:2px}
+  .pc-meta em{font-style:normal;color:var(--green)}
+  .pcard:not(.sel) .pc-meta em{color:var(--t3)}
+  .pc-foot{display:flex;align-items:center;gap:4px;margin-top:9px;font-size:12px;color:var(--blue);opacity:0}
+  .pcard.sel .pc-foot{opacity:1}
+  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card);
+    border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:16px}
+  .kv{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--t2)}
+  .kv b{color:var(--t1);font-size:13px}
+  .progress{width:120px;height:6px;border-radius:99px;background:#EFF0F1;overflow:hidden;display:block}
+  .progress i{display:block;height:100%;background:var(--blue);border-radius:99px}
+  .divider{width:1px;height:18px;background:var(--line)}
+  .grid{display:grid;grid-template-columns:1.6fr 1fr;gap:12px;margin-bottom:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .card-h{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .card-h .t{font-size:13.5px;font-weight:600}
+  .card-h .s{font-size:11.5px;color:var(--t3)}
+  .card-h .r{margin-left:auto;display:flex;gap:6px}
+  svg.chart{width:100%;height:168px;display:block}
+  .axis{font-size:10px;fill:var(--t3)}
+  .gridline{stroke:#F0F1F2}
+  .pbar{display:flex;flex-direction:column;gap:13px}
+  .pb .l{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px}
+  .pb .l span{color:var(--t2)}
+  .pb .track{display:block;height:7px;border-radius:99px;background:#F0F1F2;overflow:hidden}
+  .pb .track i{display:block;height:100%;border-radius:99px}
+  .note{margin-top:10px;font-size:12px;color:var(--t3)}
+  .dbwrap{display:flex;flex-direction:column;gap:12px}
+  .dbmetrics{display:flex;gap:10px;flex-wrap:wrap}
+  .dbmetrics > div{flex:1 1 120px;background:#f7f8fa;border-radius:8px;padding:10px 12px}
+  .dbmetrics b{display:block;font-size:19px;color:#1f2329}
+  .dbmetrics span{font-size:12px;color:var(--t3)}
+  .dbplats{display:flex;gap:8px;flex-wrap:wrap}
+  .dbplats span{background:#eef3ff;color:#3370FF;border-radius:99px;padding:2px 10px;font-size:12px}
+  .dbbtns{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .dbtip{color:var(--t3);font-size:12px}
+  .todo{display:flex;flex-direction:column;gap:8px}
+  .todo .it{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;
+    background:#FAFBFC;border:1px solid var(--line2);font-size:12.5px}
+  .dotc{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+  .todo .it .r{margin-left:auto;color:var(--t3);font-size:11.5px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;font-weight:500;color:var(--t3);font-size:11.5px;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:8px;border-bottom:1px solid var(--line2)}
+  tr:last-child td{border-bottom:0}
+  .m{font-family:Consolas,monospace;color:var(--t2);font-size:11.5px}
+  .pill{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;border-radius:4px;padding:1px 7px}
+  .p-ok{background:#E8F8E8;color:#2BA471}
+  .p-warn{background:#FFF3E0;color:#D46B08}
+  .p-bad{background:#FEECEC;color:#D83931}
+  .detail{display:none}
+  .detail.show{display:block}
+  .overview.hide{display:none}
+  .back{display:inline-flex;align-items:center;gap:6px;color:var(--t2);font-size:13px;cursor:pointer;margin-bottom:14px}
+  .back:hover{color:var(--blue)}
+  .hero{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:16px;margin-bottom:12px}
+  .hero .pico{width:40px;height:40px;border-radius:10px}
+  .hero h2{margin:0;font-size:16px;font-weight:650}
+  .hero .sub{font-size:12px;color:var(--t3);margin-top:2px}
+  .hero .r{margin-left:auto;display:flex;gap:8px}
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
+  .three .l{font-size:12px;color:var(--t3)}
+  .three .v{font-size:23px;font-weight:700;margin-top:1px}
+  .three .d{font-size:11.5px;color:var(--t2);margin-top:2px}
+  .empty{color:var(--t3);font-size:12.5px;padding:14px 0}
+  .err{background:#FEECEC;color:#D83931;border-radius:8px;padding:10px 12px;font-size:12.5px;margin-bottom:12px}
+  /* ---- 平台工作台 ---- */
+  .tasks{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .task{background:#fff;border:1px solid #EDEFF3;border-radius:10px;padding:13px 15px;display:flex;flex-direction:column;gap:8px}
+  .task.on{border-color:#BBD2FF}
+  .task .th{display:flex;align-items:center;gap:8px}
+  .task .tico{width:24px;height:24px;border-radius:7px;background:#EAF1FF;color:#3370FF;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+  .task .tname{font-weight:600;font-size:14px}
+  .task .pill{margin-left:auto;font-size:11px;padding:2px 8px;border-radius:999px;background:#F2F3F5;color:#8F959E}
+  .task.on .pill{background:#E8F7E6;color:#2BA21C}
+.task.soon{border-style:dashed;background:#FAFBFC;justify-content:center;gap:4px;grid-column:1/-1}
+.task.soon .th{color:#8F959E;font-size:13px}
+.task.soon .ic{width:24px;height:24px;border-radius:7px;background:#F2F3F5;color:#8F959E;display:flex;align-items:center;justify-content:center;font-size:12px}
+.task.soon p{margin:0;font-size:12px;color:#8F959E;line-height:1.6}
+  .task .desc{font-size:12px;color:#646A73;min-height:36px}
+  .task .foot{display:flex;gap:8px;align-items:center;border-top:1px solid #F5F6F7;padding-top:9px;margin-top:auto}
+  .task .run{margin-left:auto;font-size:11px;color:#8F959E}
+  .switch{position:relative;width:34px;height:18px;border-radius:999px;background:#D5D8DE;cursor:pointer;margin-left:auto;flex:none}
+  .switch.on{background:#3370FF}
+  .switch i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:.15s}
+  .switch.on i{left:18px}
+  .tcfg{grid-column:1/-1;background:#fff;border:1px solid #EDEFF3;border-radius:10px}
+  .tcfg .h{padding:11px 15px;border-bottom:1px solid #F5F6F7;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:8px}
+  .tcfg .b{padding:14px 15px;display:grid;grid-template-columns:1fr 1fr;gap:14px 22px}
+  .fld{display:flex;flex-direction:column;gap:5px}
+  .fld label{font-size:12px;color:#646A73}
+  .fld input[type=text],.fld input[type=number]{height:32px;border:1px solid #E5E6EB;border-radius:7px;padding:0 10px;font-size:12.5px;color:#1F2329;background:#fff;font-family:inherit}
+  .chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#1F2329}
+  .tcfg .f{padding:11px 15px;border-top:1px solid #F5F6F7;display:flex;gap:8px;justify-content:flex-end}
+  .platTabs{display:flex;gap:6px;margin:10px 0 14px}
+  .platTab{padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;color:#646A73;background:#fff;border:1px solid #E5E6EB}
+  .platTab.on{background:#EAF1FF;color:#3370FF;border-color:#B8CDFF;font-weight:600}
+  .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .scard{background:#fff;border:1px solid #E5E6EB;border-radius:10px;padding:14px 16px}
+  .scard h4{margin:0 0 10px;font-size:13px;color:#1F2329;display:flex;justify-content:space-between}
+  .sfld{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;font-size:13px;color:#4E5969}
+  .sfld input[type=number],.sfld input[type=text]{width:150px;padding:5px 8px;border:1px solid #E5E6EB;border-radius:6px;font-size:12px}
+  .sfld select{width:150px;padding:5px 8px;border:1px solid #E5E6EB;border-radius:6px;font-size:12px;background:#fff}
+  .srcRow{display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px;border-bottom:1px dashed #EEF0F3}
+  .srcRow:last-child{border-bottom:none}
+  .srcTag{font-size:11px;padding:1px 6px;border-radius:4px;background:#F2F3F5;color:#646A73}
+  .hint{font-size:12px;color:#8A9099;line-height:1.6;margin-top:6px}
+  .warnBox{margin-top:8px;padding:8px 10px;border-radius:8px;background:#FFF7E8;border:1px solid #FFE0A3;color:#8F5400;font-size:12px;line-height:1.55}
+  .kwBox{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+  .kwChip .kwX{display:inline-block;margin-left:6px;cursor:pointer;color:#98a2b3;font-weight:400}
+.kwChip .kwX:hover{color:#f54a45}
+.kwChip.ext{background:#F0F7FF;color:#0B66C3}
+.kwAdd{display:flex;gap:8px;margin-top:8px}
+.kwAdd input{flex:1;border:1px solid #E1E5EA;border-radius:8px;padding:7px 10px;font-size:13px}
+.btnSm{border:1px solid #dfe3e8;background:#fff;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}
+.btnSm:hover{border-color:#3370FF;color:#3370FF}
+.kwChip{background:#F2F3F5;border-radius:6px;padding:3px 8px;font-size:12px;color:#4E5969;display:inline-flex;gap:6px;align-items:center}
+  .kwChip b{cursor:pointer;color:#8A9099;font-weight:400}
+  .saveBar{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="top">
+    <div class="brand">
+      <span class="logo" style="background:none"><svg width="26" height="26" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="108" fill="#1664F5"/>
+  <g fill="#FFFFFF">
+    <path d="M74 177C74 126 111 92 164 92C218 92 251 124 251 169C251 202 235 222 207 244C185 261 175 273 175 294V305C175 310 171 314 166 314H121C116 314 112 310 112 305V288C112 253 127 232 153 211C177 192 188 182 188 166C188 151 178 142 163 142C147 142 137 152 134 168C133 174 130 177 124 177Z"/>
+    <rect x="112" y="334" width="63" height="59" rx="9"/>
+    <path d="M316 92H362C368 92 372 96 372 102V172H437C443 172 447 176 447 182V227C447 233 443 237 437 237H372V304C372 310 368 314 362 314H316C310 314 306 310 306 304V237H261C255 237 251 233 251 227V182C251 176 255 172 261 172H306V102C306 96 310 92 316 92Z"/>
+    <rect x="214" y="334" width="233" height="59" rx="9"/>
+  </g></svg></span>
+      社么东西
+    </div>
+    <div class="spacer"></div>
+    <button class="iconbtn" id="btnRefresh" title="刷新">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+        <path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 4v7h-7"/></svg>
+    </button>
+    <a class="iconbtn" href="/discord" title="Discord 群组链接">🔗</a>
+      <a class="iconbtn" href="/users" title="成员样本">&#128101;</a><button class="iconbtn" id="btnStrategy" title="策略">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <path d="M4 6h16M4 12h10M4 18h6"/><circle cx="18" cy="12" r="2"/><circle cx="12" cy="18" r="2"/></svg>
+    </button>
+    <button class="iconbtn" id="btnSettings" title="设置">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+    <div class="divider"></div>
+    <button class="btn" id="btnStop">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      停止
+    </button>
+    <button class="btn" id="btnPreload" title="按已勾选平台打开网页并检查登录态">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 0 1 8-8"/><path d="M20 12a8 8 0 0 1-8 8"/><circle cx="12" cy="12" r="2.2"/></svg>
+      预载
+    </button>
+    <button class="btn primary" id="btnStart">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5l11 7-11 7z"/></svg>
+      开始运行
+    </button>
+  </div>
+
+  <div id="errBox"></div>
+
+  <div class="overview hidden" id="strategyView">
+    <div class="sec">
+      <div class="sec-h"><b>策略</b><span>按平台分别配置 · 改完即时生效（下次运行）</span></div>
+      <div class="platTabs" id="stratTabs"></div>
+      <div id="stratBody"></div>
+    </div>
+  </div>
+
+  <div id="preloadOut" style="display:none;margin:0 0 10px;padding:10px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;font-size:12.5px"></div>
+  <div class="overview" id="overview">
+    <div class="sec">
+      <div class="sec-h"><b>平台</b><span>勾选即启用 · 点卡片进详情</span></div>
+      <div class="cards" id="cards"></div>
+    </div>
+
+    <div class="bar">
+      <div class="kv">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3370FF" stroke-width="2">
+          <circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 1.5"/></svg>
+        每天 10:00
+      </div>
+      <div class="divider"></div>
+      <div class="kv">今日进度 <b id="todayProgress">0 / 0</b>
+        <span class="progress"><i id="todayBar" style="width:0%"></i></span>
+      </div>
+      <div class="divider"></div>
+      <div class="kv">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#646A73" stroke-width="1.9">
+          <path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>
+        输出：飞书多维表格
+      </div>
+      <div class="spacer"></div>
+      <div class="kv" style="color:#8F959E" id="runState">—</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-h"><span class="t">新增覆盖</span><span class="s">近 7 天 · 万人</span></div>
+        <svg class="chart" id="chart" viewBox="0 0 620 168" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="card">
+        <div class="card-h"><span class="t">平台分布</span><span class="s">按覆盖人数</span></div>
+        <div class="pbar" id="dist"></div>
+        <div class="note" id="distNote"></div>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:1fr 1.6fr">
+      <div class="card">
+        <div class="card-h"><span class="t">待办</span><span class="s" id="todoCount">0 项</span></div>
+        <div class="todo" id="todos"></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><span class="t">最近加入</span><span class="s">同步自飞书</span></div>
+        <table id="recent"><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:1fr">
+      <div class="card">
+        <div class="card-h"><span class="t">本地数据库</span><span class="s" id="dbNote">SQLite · 未初始化</span></div>
+        <div class="dbwrap">
+          <div class="dbmetrics" id="dbMetrics">
+            <div><b>—</b><span>行数</span></div>
+            <div><b>—</b><span>群数</span></div>
+            <div><b>—</b><span>平台数</span></div>
+            <div><b>—</b><span>文件大小</span></div>
+          </div>
+          <div class="dbplats" id="dbPlats"></div>
+          <div class="dbbtns">
+            <button class="btn ghost" id="btnDbInit">初始化数据库</button>
+            <button class="btn" id="btnDbImport">导入本地 users.csv</button>
+            <span class="dbtip">数据库在 data/groupops.db，可用于海量成员（Steam 全量等），不占飞书表。</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail" id="detail">
+    <div class="back" id="btnBack">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+      返回总览
+    </div>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<script>
+const META = {
+  facebook:{name:'Facebook',color:'#1877F2',icon:'f'},
+  telegram:{name:'Telegram',color:'#2AABEE',icon:'tg'},
+  discord:{name:'Discord',color:'#5865F2',icon:'dc'},
+  reddit:{name:'Reddit',color:'#FF4500',icon:'rd'},
+    whatsapp:{name:'WhatsApp',color:'#25D366',icon:'wa'},
+  steam:{name:'Steam',color:'#171A21',icon:'st'},
+  x:{name:'X',color:'#0F1419',icon:'x'}
+};
+const ORDER = ['facebook','telegram','discord','reddit','whatsapp','steam','x'];
+
+function fmt(n){
+  n = Math.round(n||0);
+  if(n >= 10000){ const v = n/10000; return (v>=10? v.toFixed(1): v.toFixed(1)) + 'w'; }
+  if(n >= 1000){ return (n/1000).toFixed(1) + 'k'; }
+  return String(n);
+}
+function fmtGroups(n){ return String(Math.round(n||0)); }
+function keyOf(p){ return String(p||'').toLowerCase(); }
+function platName(k){ const m={facebook:'Facebook',telegram:'Telegram',discord:'Discord',reddit:'Reddit',whatsapp:'WhatsApp',steam:'Steam',x:'X'}; return m[k]||k; }
+function metaOf(p){
+  const k = keyOf(p);
+  return META[k] || {name:p||'未知', color:'#8F959E', icon:'?'};
+}
+function iconSvg(k, size){
+  const s = size||15;
+  if(k==='facebook') return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor"><path d="M14 9h3V6h-3c-2.2 0-4 1.8-4 4v2H8v3h2v7h3v-7h3l1-3h-4v-2c0-.6.4-1 1-1z"/></svg>`;
+  if(k==='telegram') return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor"><path d="M21 4L2.5 11.2c-.8.3-.8 1.4.1 1.6l4.6 1.3 1.7 5.2c.2.7 1.1.8 1.6.3l2.5-2.4 4.5 3.3c.6.4 1.4.1 1.6-.6L22.9 5c.2-.8-.6-1.4-1.9-1z"/></svg>`;
+  if(k==='discord') return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor"><path d="M19 5.5A16 16 0 0 0 15 4l-.3.7a12 12 0 0 0-5.4 0L9 4a16 16 0 0 0-4 1.5C2.4 9.4 1.7 13.2 2 17a16 16 0 0 0 5 2.5l1-1.7c-.6-.2-1.2-.5-1.8-.9l.4-.3a11 11 0 0 0 9.6 0l.4.3c-.6.4-1.2.7-1.8.9l1 1.7a16 16 0 0 0 5-2.5c.4-4-.7-7.8-2.8-11.5zM8.7 14.6c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>`;
+  if(k==='reddit') return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="13" r="6"/><circle cx="6" cy="8" r="2"/><circle cx="18" cy="8" r="2"/></svg>`;
+  if(k==='steam') return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.6 6.4l-1.6 7.4c-.1.5-.4.6-.8.4l-2.2-1.6-1.1 1c-.1.1-.2.2-.4.2l.1-2.3 4.2-3.8c.2-.2 0-.3-.3-.1l-5.2 3.3-2.2-.7c-.5-.2-.5-.5.1-.7l8.6-3.3c.4-.1.7.1.6.5z"/></svg>`;
+  if(k==='whatsapp') return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 2a8 8 0 1 1-4.1 14.9l-.4-.2-2.6.7.7-2.5-.2-.4A8 8 0 0 1 12 4zm-3 4c-.3 0-.6.1-.8.4-.3.3-.9 1-.9 2s.7 2 .8 2.2c.1.2 1.4 2.2 3.4 3 1.7.7 2.1.6 2.5.5.4 0 1.2-.5 1.4-1s.2-.9.1-1l-1.3-.6c-.2-.1-.4 0-.5.1l-.6.7c-.1.1-.3.1-.4 0-.2-.1-.8-.3-1.5-1-.6-.5-1-1.2-1.1-1.4-.1-.2 0-.3.1-.4l.4-.4c.1-.1.1-.3 0-.4l-.6-1.4c-.1-.3-.3-.3-.4-.3z"/></svg>`;
+  if(k==='x') return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h4l4.5 6L17.5 4H20l-6 7.5L20.5 20H16l-4.7-6.4L6 20H3.5l6.7-8.3z"/></svg>`;
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>`;
+}
+
+let DATA = null;
+let CFG = null;
+let enabled = JSON.parse(localStorage.getItem('enabledPlatforms') || '["facebook","telegram","discord"]');
+function isEnabled(k){ return enabled.indexOf(k) >= 0; }
+function saveEnabled(){ localStorage.setItem('enabledPlatforms', JSON.stringify(enabled)); }
+
+async function load(){
+  try{
+    const r = await fetch('/api/summary', {cache:'no-store'});
+    DATA = await r.json();
+    try {
+      const rc = await fetch('/api/config', {cache:'no-store'});
+      CFG = await rc.json();
+    } catch(e) { CFG = null; }
+    document.getElementById('errBox').innerHTML = '';
+  }catch(e){
+    document.getElementById('errBox').innerHTML = '<div class="err">读不到本地服务：' + e.message + '</div>';
+    DATA = {totals:{groups:0,members:0,todayGroups:0,todayMembers:0},platforms:[],series:[],todos:[],todoCount:0,recent:[]};
+  }
+  render();
+}
+
+function render(){
+  const byPlat = {};
+  (DATA.platforms||[]).forEach(function(p){ byPlat[keyOf(p.name)] = p; });
+
+  // cards
+  const cards = document.getElementById('cards');
+  cards.innerHTML = ORDER.map(function(k){
+    const m = META[k];
+    const d = byPlat[k];
+    const has = !!d && d.groups > 0;
+    const on = isEnabled(k);
+    const cls = ['pcard']; if(on) cls.push('sel'); if(!has) cls.push('nodata');
+    const num = has ? fmt(d.members) : '—';
+    const reserved = !!(CFG && CFG.reserved && CFG.reserved.map(function(x){return String(x).toLowerCase();}).indexOf(k) >= 0);
+    const meta = has
+      ? `${fmtGroups(d.groups)} ${k==='discord'?'服务器':'群'} · 今日 <em>+${fmtGroups(d.todayGroups)}</em>`
+      : (reserved ? '预留 · 适配器未接' : '未接入数据');
+    return `<div class="${cls.join(' ')}" data-k="${k}">
+      <div class="pc-top">
+        <span class="pico" style="background:${m.color}">${iconSvg(k,15)}</span>
+        <span class="pc-name">${m.name}</span>
+        <span class="pc-check">${on?'✓':''}</span>
+      </div>
+      <div class="pc-num"><span class="v">${num}</span><span class="u">覆盖</span></div>
+      <div class="pc-meta">${meta}</div>
+      <div class="pc-foot">详情
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>`;
+  }).join('');
+
+  cards.querySelectorAll('.pcard').forEach(function(el){
+    el.addEventListener('click', function(e){
+      const k = el.dataset.k;
+      if(e.target.closest('.pc-check')){
+        if(isEnabled(k)) enabled = enabled.filter(function(x){return x!==k;});
+        else enabled.push(k);
+        saveEnabled(); render(); return;
+      }
+      openDetail(k);
+    });
+  });
+
+  const t = DATA.totals || {groups:0,members:0,todayGroups:0,todayMembers:0};
+  const qm = (CFG && CFG.quotas) ? CFG.quotas : {};
+  const quota = enabled.reduce(function(s,k){ return s + (Number(qm[platName(k)]) || 0); }, 0);
+  document.getElementById('todayProgress').textContent = t.todayGroups + ' / ' + (quota||0);
+  document.getElementById('todayBar').style.width = quota ? Math.min(100, t.todayGroups/quota*100) + '%' : '0%';
+  document.getElementById('runState').textContent = (DATA.running? '运行中 · ':'') + (DATA.phase||'idle');
+
+  drawChart();
+  drawDist(byPlat, t);
+  drawTodos();
+  drawRecent();
+}
+
+function drawChart(){
+  const svg = document.getElementById('chart');
+  const s = (DATA.series||[]).slice(-7);
+  if(!s.length){ svg.innerHTML=''; return; }
+  const W=620,H=168,x0=44,x1=604,y0=18,y1=138;
+  const maxM = Math.max.apply(null, s.map(function(d){return d.members;}).concat([1]));
+  const pts = s.map(function(d,i){
+    const x = x0 + (x1-x0) * (s.length===1?0:i/(s.length-1));
+    const y = y1 - (y1-y0) * (d.members/maxM);
+    return [Math.round(x), Math.round(y)];
+  });
+  let dline = pts.map(function(p,i){return (i?'L':'M')+p[0]+','+p[1];}).join(' ');
+  const area = dline + ` L${pts[pts.length-1][0]},${y1} L${pts[0][0]},${y1} Z`;
+  let grid='', labels='';
+  [0,0.25,0.5,0.75,1].forEach(function(f){
+    const y = y1 - (y1-y0)*f;
+    grid += `<line class="gridline" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"/>`;
+    labels += `<text class="axis" x="8" y="${y+4}">${fmt(maxM*f)}</text>`;
+  });
+  const days = s.map(function(d,i){
+    const x = x0 + (x1-x0)*(s.length===1?0:i/(s.length-1));
+    const mmdd = String(d.d||'').slice(5);
+    return `<text class="axis" x="${x-14}" y="158">${mmdd}</text>`;
+  }).join('');
+  const dot = `<circle cx="${pts[pts.length-1][0]}" cy="${pts[pts.length-1][1]}" r="3.6" fill="#3370FF"/>`;
+  svg.innerHTML = grid + labels +
+    `<path d="${area}" fill="rgba(51,112,255,.10)"/>` +
+    `<path d="${dline}" fill="none" stroke="#3370FF" stroke-width="2.4" stroke-linejoin="round"/>` + dot + days;
+}
+
+function drawDist(byPlat, t){
+  const rows = ORDER.map(function(k){
+    const d = byPlat[k] || {groups:0,members:0};
+    return {k:k, groups:d.groups, members:d.members};
+  }).sort(function(a,b){ return b.members - a.members; });
+  const max = Math.max.apply(null, rows.map(function(r){return r.members;}).concat([1]));
+  document.getElementById('dist').innerHTML = rows.map(function(r){
+    const m = META[r.k];
+    const pct = max ? Math.max(r.members? 2:0, r.members/max*100) : 0;
+    const label = r.members ? `${fmtGroups(r.groups)} ${r.k==='discord'?'服务器':'群'} · ${fmt(r.members)}` : (isEnabled(r.k)?'暂无数据':'未启用');
+    return `<div class="pb"><div class="l"><span>${m.name}</span><span>${label}</span></div>
+      <span class="track"><i style="width:${pct}%;background:${m.color}"></i></span></div>`;
+  }).join('');
+  document.getElementById('distNote').textContent =
+    `合计 ${fmtGroups(t.groups)} ${'群'} · ${fmt(t.members)} · 今日 +${fmtGroups(t.todayGroups)} 群 / +${fmt(t.todayMembers)}`;
+}
+
+function drawTodos(){
+  const list = DATA.todos || [];
+  document.getElementById('todoCount').textContent = (DATA.todoCount||0) + ' 项';
+  document.getElementById('todos').innerHTML = list.length ? list.map(function(x){
+    const bad = /失效|退出|封/.test(x.status||'');
+    const color = bad ? '#F54A45' : (/待|审核|验证/.test(x.status||'') ? '#FF8800' : '#8F959E');
+    return `<div class="it"><span class="dotc" style="background:${color}"></span>${x.name||'—'}<span class="r">${x.status||''}</span></div>`;
+  }).join('') : '<div class="empty">没有待办</div>';
+}
+
+function drawRecent(){
+  const list = (DATA.recent || []).slice(0,5);
+  const tb = document.querySelector('#recent tbody');
+  tb.innerHTML = list.length ? ('<tr><th>群组</th><th>平台</th><th>成员</th><th>加入</th></tr>' + list.map(function(x){
+    const m = metaOf(x.platform);
+    return `<tr><td>${x.name||'—'}</td><td>${m.name}</td><td>${fmt(x.members)}</td><td class="m">${x.joined||'—'}</td></tr>`;
+  }).join('')) : '<tr><td class="empty">暂无记录</td></tr>';
+}
+
+const TASKS = [
+  {id:'discovery', icon:'＋', name:'拓群', desc:'按关键词搜群、按人数与语言过滤、逐个加入，结果写入飞书群清单。',
+   fields:[{k:'quota',t:'number',l:'每日配额'},{k:'min_members',t:'number',l:'最小人数'},
+           {k:'keywords',t:'text',l:'关键词（逗号分隔，留空用全局）'},{k:'interval',t:'text',l:'加群间隔'}]},
+  {id:'audit', icon:'✓', name:'群组体检', desc:'回扫已加入群：成员数变化、日发帖量，失效的自动标记。',
+   fields:[{k:'every_days',t:'number',l:'巡检周期（天）'}]},
+  {id:'chat', icon:'≡', name:'聊天记录分析', desc:'大样本采样 + 精准筛：去 bot / 广告 / 短消息 / 重复，本地聚类后再让模型只读 Top 片段。',
+   fields:[{k:'window_days',t:'number',l:'时间窗（天）'},{k:'max_messages',t:'number',l:'采样上限（条）'},
+           {k:'min_len',t:'number',l:'最短消息长度'},{k:'clusters',t:'number',l:'聚类簇数'},
+           {k:'top_clusters',t:'number',l:'送模型的簇数'},{k:'per_cluster',t:'number',l:'每簇片段数'},
+           {k:'cap_once',t:'number',l:'单次成本上限（元）'},{k:'cap_month',t:'number',l:'每月成本上限（元）'},
+           {k:'drop_bots',t:'bool',l:'过滤 bot / 机器人'},{k:'drop_ads',t:'bool',l:'过滤广告与推广'},
+           {k:'drop_short',t:'bool',l:'过滤短消息'},{k:'dedupe',t:'bool',l:'去重（同文多次）'}]},
+  {id:'trend', icon:'◎', name:'热点跟踪', desc:'持续盯住监控词与竞品名，命中就记一条，按天聚合成趋势。',
+   fields:[{k:'words',t:'text',l:'监控词（逗号分隔）'}]},
+  {id:'brief', icon:'✎', name:'策略总结', desc:'把拓群、体检、分析、热点的产物合并成一份周报，可直接发飞书群。',
+   fields:[{k:'at',t:'text',l:'生成时间'}]}
+];
+
+function taskOf(k, tid){
+  const all = (CFG && CFG.tasks) || {};
+  const p = all[platName(k)] || {};
+  return p[tid] || {enabled:false};
+}
+
+function openDetail(k){
+  const m = META[k];
+  const d = (DATA.platforms||[]).find(function(p){ return keyOf(p.name)===k; }) || {groups:0,members:0,todayGroups:0,todayMembers:0};
+  const avg = d.groups ? d.members/d.groups : 0;
+  const unit = k==='discord' ? '服务器' : '群';
+  const RENDER = TASKS.filter(function(t){ return t.id === "discovery"; });
+  const cards = RENDER.map(function(t){
+    const c = taskOf(k, t.id);
+    const on = !!c.enabled;
+    const st = c.last_result ? c.last_result : (on ? '已开启 · 未运行' : '已关闭');
+    return `<div class="task ${on?'on':''}" data-task="${t.id}">
+      <div class="th"><span class="tico">${t.icon}</span><span class="tname">${t.name}</span>
+        <span class="pill">${on?'运行中':'关闭'}</span>
+        <span class="switch ${on?'on':''}" onclick="toggleTask('${k}','${t.id}')"><i></i></span>
+      </div>
+      <div class="desc">${t.desc}</div>
+      <div class="foot">
+        <button class="btn" onclick="openTaskCfg('${k}','${t.id}')">配置</button>
+        <button class="btn primary" onclick="runTask('${k}','${t.id}')">${t.id==='discovery'?'立即加群':'运行'}</button>
+        <span class="run">${st}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('detailBody').innerHTML = `
+    <div class="hero">
+      <span class="pico" style="background:${m.color}">${iconSvg(k,20)}</span>
+      <div><h2>${m.name}</h2><div class="sub">${isEnabled(k)?'已启用':'未启用'} · 今日 +${fmtGroups(d.todayGroups)} ${unit}</div></div>
+      <div class="r">
+        <button class="btn" onclick="toggleFromDetail('${k}')">${isEnabled(k)?'停用平台':'启用平台'}</button>
+      </div>
+    </div>
+    <div class="three">
+      <div class="card"><div class="l">累计${unit}</div><div class="v">${fmtGroups(d.groups)}</div><div class="d">今日 +${fmtGroups(d.todayGroups)}</div></div>
+      <div class="card"><div class="l">累计覆盖</div><div class="v">${fmt(d.members)}</div><div class="d">今日 +${fmt(d.todayMembers)}</div></div>
+      <div class="card"><div class="l">平均规模</div><div class="v">${fmt(avg)}</div><div class="d">${d.groups?('共 '+fmtGroups(d.groups)+' 个'):'暂无'}</div></div>
+    </div>
+    <div class="sec" style="margin-top:18px"><div class="sec-h"><b>任务</b><span>当前开放拓群 · 其余开发中</span></div></div>
+    <div class="tasks" id="taskGrid">${cards}<div class="task soon"><div class="thead"><span class="ic">…</span><b>其他任务</b></div><p>群组体检 / 聊天记录分析 / 热点跟踪 / 策略总结 —— 数据管线开发中，暂不开放。</p></div></div>
+    <div id="taskCfgBox"></div>`;
+  document.getElementById('overview').classList.add('hide');
+  document.getElementById('detail').classList.add('show');
+  window.scrollTo({top:0});
+}
+
+function openTaskCfg(k, tid){
+  const t = TASKS.find(function(x){ return x.id===tid; });
+  const c = taskOf(k, tid);
+  const box = document.getElementById('taskCfgBox');
+  if(box.dataset.open === tid){ box.innerHTML=''; box.dataset.open=''; return; }
+  const fields = t.fields.map(function(f){
+    const v = c[f.k];
+    if(f.t==='bool'){
+      return `<label class="chk"><input type="checkbox" data-k="${f.k}" ${v?'checked':''}>${f.l}</label>`;
+    }
+    return `<div class="fld"><label>${f.l}</label><input type="${f.t}" data-k="${f.k}" value="${v===undefined||v===null?'':String(v)}"></div>`;
+  }).join('');
+  box.dataset.open = tid;
+  box.innerHTML = `<div class="tcfg" style="margin-top:12px">
+    <div class="h">${t.name} · 配置 <span class="pill" style="margin-left:6px">${platName(k)}</span></div>
+    <div class="b">${fields}</div>
+    <div class="f"><button class="btn" onclick="document.getElementById('taskCfgBox').innerHTML='';document.getElementById('taskCfgBox').dataset.open=''">取消</button>
+      <button class="btn primary" onclick="saveTask('${k}','${tid}')">保存</button></div>
+  </div>`;
+  box.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+async function patchTask(k, tid, patch){
+  try{
+    await fetch('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({platform: platName(k), task: tid, patch: patch})});
+  }catch(e){}
+  await load();
+}
+
+async function toggleTask(k, tid){
+  const c = taskOf(k, tid);
+  await patchTask(k, tid, {enabled: !c.enabled});
+  openDetail(k);
+}
+
+async function saveTask(k, tid){
+  const box = document.getElementById('taskCfgBox');
+  const patch = {};
+  box.querySelectorAll('[data-k]').forEach(function(el){
+    const key = el.dataset.k;
+    if(el.type==='checkbox'){ patch[key] = el.checked; }
+    else if(el.type==='number'){ patch[key] = Number(el.value) || 0; }
+    else { patch[key] = el.value; }
+  });
+  await patchTask(k, tid, patch);
+  openDetail(k);
+  openTaskCfg(k, tid);
+  openTaskCfg(k, tid); /* 打开并显示新值 */
+}
+
+async function runTask(k, tid){
+  if(tid !== 'discovery'){
+    alert('「' + (TASKS.find(function(x){return x.id===tid;}).name) + '」的数据管线还没接上，先把拓群跑通。');
+    return;
+  }
+  await runPlatform(k);
+}
+function toggleFromDetail(k){
+  if(isEnabled(k)) enabled = enabled.filter(function(x){return x!==k;}); else enabled.push(k);
+  saveEnabled(); openDetail(k);
+}
+async function runPlatform(k){
+  try{
+    await fetch('/control', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'start', platform:k})});
+  }catch(e){}
+  load();
+}
+document.getElementById('btnBack').addEventListener('click', function(){
+  document.getElementById('detail').classList.remove('show');
+  document.getElementById('overview').classList.remove('hide');
+});
+document.getElementById('btnStart').addEventListener('click', async function(){
+  var r = await fetch('/control', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'pipeline'})});
+  var j = null; try { j = await r.json(); } catch(e){}
+  if (j && j.ok) { alert('一键流程已启动：拓群 → 成员采样 → 人数回填 → Steam 抽样 → 日报'); }
+  else { alert('启动失败：' + ((j && (j.error||j.msg)) || r.status)); }
+  load();
+});
+document.getElementById('btnStop').addEventListener('click', async function(){
+  await fetch('/control', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'stop'})});
+  load();
+});
+document.getElementById('btnRefresh').addEventListener('click', load);
+
+load();
+setInterval(load, 15000);
+</script>
+<div id="mask" style="display:none;position:fixed;inset:0;background:rgba(31,35,41,.45);z-index:50">
+  <div style="width:460px;margin:80px auto;background:#fff;border-radius:10px;padding:18px 20px">
+    <div style="display:flex;align-items:center;margin-bottom:14px">
+      <b style="font-size:15px">设置</b>
+      <span style="margin-left:auto;cursor:pointer;color:#646A73;font-size:18px" id="btnCloseSet">×</span>
+    </div>
+    <div style="font-size:12.5px;color:#646A73;margin-bottom:8px">输出目标</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="oFeishu"> 飞书多维表格（主）</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="oJsonl"> 本地归档 groups.jsonl</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="oCsv"> 导出 groups.csv</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#8F959E"><input type="checkbox" id="oSqlite" disabled> SQLite（需先装 sqlite3.exe，当前未检测到）</label>
+    </div>
+    <div style="font-size:12.5px;color:#646A73;margin-bottom:8px">每日定时</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="sEnabled"> 启用</label>
+      <input id="sTime" value="10:00" style="width:80px;padding:4px 8px;border:1px solid #E5E6EB;border-radius:6px;font-size:13px">
+      <span style="font-size:12px;color:#8F959E">Windows 计划任务</span>
+    </div>
+    <div style="font-size:12.5px;color:#646A73;margin-bottom:8px">平台目标与行为</div>
+    <div style="margin-bottom:6px;border:1px solid #E5E6EB;border-radius:8px;overflow:hidden">
+      <div style="display:grid;grid-template-columns:86px 44px 66px 1fr;align-items:center;background:#F7F8FA;font-size:12px;color:#646A73;padding:6px 10px">
+        <span>平台</span><span style="text-align:center">启用</span><span style="text-align:center">每日目标</span><span style="text-align:center">行为</span>
+      </div>
+      <div id="platRows"></div>
+    </div>
+    <p style="font-size:11.5px;color:#8F959E;margin:0 0 14px">行为：发现=找群　加入=自动加群　成员=采集成员样本</p>
+    <h4 style="font-size:13px;margin:16px 0 8px">通知</h4>
+    <div style="display:grid;grid-template-columns:64px 1fr 72px;gap:8px;align-items:center;margin-bottom:6px">
+      <span style="font-size:12px;color:#646A73">主群</span>
+      <input id="ntMain" class="inp" placeholder="飞书 webhook，留空=不发" style="font-size:12px;padding:5px 8px" />
+      <label style="font-size:12px;color:#646A73"><input type="checkbox" id="ntMainEn" /> 启用</label>
+    </div>
+    <div style="display:grid;grid-template-columns:64px 1fr 72px;gap:8px;align-items:center;margin-bottom:6px">
+      <span style="font-size:12px;color:#646A73">运维群</span>
+      <input id="ntOps" class="inp" placeholder="未配置则告警回落主群" style="font-size:12px;padding:5px 8px" />
+      <label style="font-size:12px;color:#646A73"><input type="checkbox" id="ntOpsEn" /> 启用</label>
+    </div>
+    <div style="border:1px solid #E5E6EB;border-radius:8px;overflow:hidden;margin-top:8px">
+      <div style="display:grid;grid-template-columns:88px 1fr 1fr 1fr;align-items:center;background:#F7F8FA;font-size:12px;color:#646A73;padding:6px 10px">
+        <span>平台</span><span style="text-align:center">日报</span><span style="text-align:center">完成摘要</span><span style="text-align:center">告警</span>
+      </div>
+      <div id="ntRows"></div>
+    </div>
+    <p style="font-size:11.5px;color:#8F959E;margin:6px 0 14px">日报=每日 21:00 汇总卡（走主群）　完成摘要=每轮跑完一条　告警=探活失败/配额不足/风控中断（走运维群，未配置则回落主群）</p>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn" id="btnCancelSet">取消</button>
+      <button class="btn primary" id="btnSaveSet">保存</button>
+    </div>
+    <div id="setMsg" style="font-size:12px;color:#2BA471;margin-top:10px"></div>
+  </div>
+</div>
+<script src="/src_settings.js"></script>
+<script src="/src_strategy.js"></script>
+
+<script>
+(function(){
+  function el(id){ return document.getElementById(id); }
+  function fmt(n){ return (n||0).toLocaleString(); }
+  async function loadDb(){
+    var note = el('dbNote'), box = el('dbMetrics'), plats = el('dbPlats');
+    if (!box) return;
+    var d = null;
+    try { d = await (await fetch('/api/db/stats', {cache:'no-store'})).json(); } catch(e){}
+    if (!d || !d.ok) {
+      if (note) note.textContent = 'SQLite · 未初始化';
+      box.innerHTML = '<div><b>—</b><span>行数</span></div><div><b>—</b><span>群数</span></div><div><b>—</b><span>平台数</span></div><div><b>—</b><span>文件大小</span></div>';
+      if (plats) plats.innerHTML = '';
+      return;
+    }
+    if (note) note.textContent = 'SQLite · ' + (d.platforms||[]).length + ' 个平台';
+    box.innerHTML = '<div><b>'+fmt(d.rows)+'</b><span>行数</span></div>' +
+      '<div><b>'+fmt(d.groups)+'</b><span>群数</span></div>' +
+      '<div><b>'+fmt((d.platforms||[]).length)+'</b><span>平台数</span></div>' +
+      '<div><b>'+(d.size_mb||0)+' MB</b><span>文件大小</span></div>';
+    if (plats) plats.innerHTML = (d.platforms||[]).map(function(x){
+      return '<span>'+x.name+' '+fmt(x.users)+' 人 / '+x.groups+' 群</span>';
+    }).join('');
+  }
+  document.addEventListener('click', async function(e){
+    var id = e.target && e.target.id;
+    if (id === 'btnDbInit' || id === 'btnDbImport') {
+      var btn = e.target; var old = btn.textContent;
+      btn.disabled = true; btn.textContent = '处理中…';
+      try {
+        var url = id === 'btnDbInit' ? '/api/db/init' : '/api/db/import';
+        var r = await (await fetch(url, {method:'POST'})).json();
+        btn.textContent = r.ok ? (id === 'btnDbInit' ? '已初始化' : ('已导入 ' + (r.imported||0) + ' 行')) : '失败';
+        await loadDb();
+      } catch(err) { btn.textContent = '失败'; }
+      setTimeout(function(){ btn.disabled = false; btn.textContent = old; }, 2200);
+    }
+  });
+  window.__loadDb = loadDb;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', loadDb);
+  else loadDb();
+})();
+</script>
+
+<script>
+(function(){
+  var KEYMAP = {facebook:'facebook',telegram:'telegram',discord:'discord',reddit:'reddit',whatsapp:'whatsapp',steam:'steam'};
+  function btnEl(){ return document.getElementById('btnPreload'); }
+  window.addEventListener('message', function(ev){
+    if (ev.source !== window) return;
+    var d = ev.data || {};
+    if (!d.__dshPreloadResult) return;
+    var box = document.getElementById('preloadOut');
+    var b = btnEl();
+    if (b) { b.disabled = false; b.textContent = '预载'; }
+    if (!box) return;
+    var res = (d.data && d.data.results) || [];
+    if (!res.length) { box.style.display='block'; box.textContent='预载未返回结果（扩展未响应）'; return; }
+    var rows = res.map(function(r){
+      var st = r.logged ? '<span style="color:#2BA471">已登录</span>'
+               : (r.error ? '<span style="color:#D83931">探针失败：'+r.error+'</span>'
+                          : '<span style="color:#8F959E">未登录</span>');
+      return '<div style="display:flex;gap:10px;align-items:center;padding:3px 0">'+
+             '<b style="width:82px">'+r.key+'</b><span style="width:70px">'+(r.opened?'新开标签':'已存在')+'</span>'+
+             '<span style="flex:1;color:#646A73;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+r.url+'</span>'+st+'</div>';
+    }).join('');
+    box.style.display='block';
+    box.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><b>预载结果</b><span style="cursor:pointer;color:#8F959E" onclick="this.parentNode.parentNode.style.display=\'none\'">关闭</span></div>'+rows;
+  });
+  document.addEventListener('click', function(e){
+    var b = e.target.closest && e.target.closest('#btnPreload');
+    if (!b) return;
+    b.disabled = true; b.textContent = '预载中…';
+    var plats = (typeof enabled !== 'undefined' ? enabled : []).map(function(k){ return KEYMAP[k] || k; });
+    window.postMessage({ __dshPreload: true, platforms: plats }, '*');
+    setTimeout(function(){ if (b.disabled) { b.disabled=false; b.textContent='预载'; } }, 30000);
+  });
+})();
+</script>
+
+</body>
+</html>

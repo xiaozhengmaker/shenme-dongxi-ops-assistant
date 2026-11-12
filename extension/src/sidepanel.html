@@ -1,0 +1,88 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <img src="../icons/icon32.png" alt="">
+      <span>社么东西</span>
+    </div>
+    <button id="btnOpen" class="ghost" title="打开完整看板">看板 ↗</button>
+  </header>
+
+  <section id="offline" class="offline hidden">
+    <b>后台没在跑</b>
+    <p>计划任务已安装，点下面复制命令，粘到 PowerShell 里回车即可；之后开机自动运行。</p>
+    <button id="btnCopy" class="ghost wide">复制启动命令</button>
+  </section>
+
+  <section class="hero">
+    <div class="row">
+      <span id="dot" class="dot off"></span>
+      <span id="hubText">连接中…</span>
+    </div>
+    <div class="progress"><div id="bar"></div></div>
+    <div class="row small">
+      <span id="progressText">—</span>
+      <span id="phase" class="pill">idle</span>
+    </div>
+  </section>
+
+  <section class="lights" id="lights">
+    <div class="lg-row">
+      <span class="lg-label">服务</span>
+      <div class="lg-items">
+        <div class="light" title="本地后台 hub"><span id="lHub" class="dot off"></span><span>后台</span></div>
+        <div class="light" title="扩展注入权限"><span id="lPerm" class="dot off"></span><span>注入</span></div>
+      </div>
+    </div>
+    <div class="lg-row">
+      <span class="lg-label">登录态</span>
+      <div class="lg-items">
+        <div class="light" data-pk="telegram" title="Telegram Web 会话"><span class="dot off"></span><span>TG</span></div>
+        <div class="light" data-pk="facebook" title="Facebook 登录态"><span class="dot off"></span><span>FB</span></div>
+        <div class="light" data-pk="discord" title="Discord 登录态"><span class="dot off"></span><span>DC</span></div>
+        <div class="light" data-pk="whatsapp" title="WhatsApp Web 登录态"><span class="dot off"></span><span>WA</span></div>
+        <div class="light" data-pk="reddit" title="Reddit 登录态"><span class="dot off"></span><span>RD</span></div>
+        <div class="light" data-pk="steam" title="Steam 登录态"><span class="dot off"></span><span>Steam</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="kpis">
+    <div class="kpi"><b id="kJoined">0</b><span>本次已加</span></div>
+    <div class="kpi"><b id="kSkipped">0</b><span>跳过</span></div>
+    <div class="kpi"><b id="kFailed">0</b><span>失败</span></div>
+  </section>
+
+  <details class="plats" id="platsBox">
+    <summary class="ttl">本次运行平台<span id="platsHint" class="hint">—</span></summary>
+    <div id="platList"></div>
+  </details>
+
+  <section class="actions">
+    <button id="btnStart" class="primary">开始运行</button>
+    <button id="btnStop" class="plain">停止</button>
+  </section>
+
+  <section class="livebox" id="livebox">
+    <div class="ttl">运行实况 <span><span id="livePlat" class="live-pill">—</span> <span id="liveState" class="live-pill">空闲</span></span></div>
+    <div id="liveCurrent" class="live-current">—</div>
+    <div class="live-prog"><div id="liveBar"></div></div>
+    <ul id="liveEvents" class="live-events"></ul>
+  </section>
+
+  <section class="logbox">
+    <div class="ttl">最近</div>
+    <div id="log" class="log">—</div>
+  </section>
+
+  <footer>
+    <span id="quota"></span>
+  </footer>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

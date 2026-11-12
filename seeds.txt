@@ -1,0 +1,5 @@
+# 一行一个：t.me 链接 或 @username
+# 手工/外部搜索得到的候选放这里，优先级最高
+# 示例：
+# https://t.me/example_channel
+# @example_group

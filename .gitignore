@@ -1,0 +1,51 @@
+# —— 凭据与本地数据，不要提交 ——
+config.json
+data/
+logs/
+*.log
+
+# Chrome 调试 profile（含登录态）
+D:/ChromeFeishu/
+ChromeFeishu/
+
+# 临时产物
+*.tmp
+*.bak
+dashboard_mock*.html
+mock_*.png
+dash_*.png
+fb_*.png
+shot*.png
+ext*.png
+row*.png
+sel*.png
+rng.png
+ctx.png
+del*.png
+clean16.png
+one.png
+ai1.png
+now.png
+after_esc.png
+final.png
+fb5*.png
+tg*.png
+*.tsv
+
+# —— 迁移/打包附加 ——
+config.local.json
+*.zip
+dist/
+docs/archive/
+data/*.db
+data/*.db-journal
+__pycache__/
+*.pyc
+
+# Discord/其它平台的原始抓取数据（体积大，可重新生成）
+discord_guilds_raw.json
+discord_channels.json
+
+# 密钥文件（只在本机）
+.feishu_app.json
+config.backup.json
