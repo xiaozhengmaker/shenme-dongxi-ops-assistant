@@ -3,7 +3,7 @@ window.addEventListener("message", function (ev) {
   var d = ev.data;
   if (!d || d.__dshPreload !== true) return;
   try {
-    chrome.runtime.sendMessage({ type: "preload", platforms: d.platforms || [] }, function (res) {
+    chrome.runtime.sendMessage({ type: "preload", platforms: d.platforms || [], recheck: d.recheck === true, recheck: d.recheck === true }, function (res) {
       window.postMessage({
         __dshPreloadResult: true,
         ok: !!(res && res.ok),

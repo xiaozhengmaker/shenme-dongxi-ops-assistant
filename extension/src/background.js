@@ -362,15 +362,26 @@ function probeLoginFn(key) {
   try {
     if (key === "telegram") return !!(window.rootScope || document.querySelector("#column-center"));
     if (key === "facebook") return (document.cookie || "").indexOf("c_user=") >= 0;
-    if (key === "discord") return !!document.querySelector("[class*='guilds']");
+    if (key === "discord") {
+      if (document.querySelector("input[name='email']") || document.querySelector("[class*='loginForm']")) return false;
+      if (document.querySelector("[class*='guilds']")) return true;
+      return !!document.querySelector("[class*='sidebar']") && !!document.querySelector("[class*='chat']");
+    }
     if (key === "whatsapp") return !!document.querySelector("#pane-side");
-    if (key === "reddit") return !document.querySelector("input[type=password]") && !!(document.querySelector("shreddit-app") || document.querySelector("#header"));
-    if (key === "steam") return !!document.querySelector("#account_pulldown");
+    if (key === "reddit") {
+      if (document.querySelector("input[type=password]")) return false;
+      return !!(document.querySelector("shreddit-app") || document.querySelector("#header") || document.querySelector("faceplate-tracker"));
+    }
+    if (key === "steam") {
+      if (document.querySelector("a.global_action_link[href*='login']")) return false;
+      return !!(document.querySelector("#account_pulldown") || document.querySelector(".playerAvatar"));
+    }
   } catch (e) {}
   return false;
 }
 
-async function handlePreload(platforms) {
+async function handlePreload(platforms, opts) {
+  const recheck = !!(opts && opts.recheck);
   const out = [];
   for (const key of (platforms || [])) {
     const url = PRELOAD_URLS[key];
@@ -383,14 +394,17 @@ async function handlePreload(platforms) {
       tab = await chrome.tabs.create({ url, active: false });
       opened = true;
       await new Promise(r => setTimeout(r, 3500));
+    } else if (recheck) {
+      try { await chrome.tabs.update(tab.id, { active: true }); } catch (e) {}
+      await new Promise(r => setTimeout(r, 1200));
     }
     let logged = null, err = null;
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
       try {
         const r = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: probeLoginFn, args: [key] });
         logged = !!(r && r[0] && r[0].result);
         break;
-      } catch (e) { err = String(e && e.message || e); await new Promise(r2 => setTimeout(r2, 1200)); }
+      } catch (e) { err = String(e && e.message || e); await new Promise(r2 => setTimeout(r2, 1500)); }
     }
     out.push({ key, url, opened, logged, error: err });
   }
@@ -398,7 +412,7 @@ async function handlePreload(platforms) {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg && msg.type === "preload") { handlePreload(msg.platforms).then(sendResponse); return true; }
+  if (msg && msg.type === "preload") { handlePreload(msg.platforms, { recheck: !!msg.recheck }).then(sendResponse); return true; }
   if (msg && msg.type === "start") {
     setState({ running: true, stats: { joined: 0, failed: 0, skipped: 0 } }).then(() => {
       hubFetch("/control", { method: "POST", headers: { "content-type": "application/json" },
