@@ -897,6 +897,22 @@ while ($listener.IsListening) {
       continue
     }
 
+    if ($path -eq "/wa") {
+      $file = Join-Path $PSScriptRoot "wa.html"
+      if (Test-Path $file) {
+        $html = [System.IO.File]::ReadAllText($file, [System.Text.Encoding]::UTF8)
+        $hb = [System.Text.Encoding]::UTF8.GetBytes($html)
+        $ctx.Response.StatusCode = 200
+        $ctx.Response.ContentType = "text/html; charset=utf-8"
+        $ctx.Response.ContentLength64 = $hb.Length
+        $ctx.Response.OutputStream.Write($hb, 0, $hb.Length)
+        $ctx.Response.Close()
+      } else {
+        Send-Json $ctx 404 @{ error = "wa.html missing" }
+      }
+      continue
+    }
+
     if ($path -eq "/users") {
       $file = Join-Path $PSScriptRoot "users.html"
       if (Test-Path $file) {
@@ -910,6 +926,31 @@ while ($listener.IsListening) {
       } else {
         Send-Json $ctx 404 @{ error = "users.html missing" }
       }
+      continue
+    }
+
+    if ($path -eq "/api/wa" -and $req.HttpMethod -eq "GET") {
+      $waJson = Join-Path $PSScriptRoot "data\wa_candidates.json"
+      $items = @(); $queries = 0; $mode = "search_only"; $maxJoin = 0
+      if (Test-Path $waJson) {
+        try {
+          $o = [System.IO.File]::ReadAllText($waJson, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+          $items = @($o.items); $queries = @($o.queries).Count
+        } catch {}
+      }
+      try { if ($cfg.wa) { $mode = [string]$cfg.wa.mode; $maxJoin = [int]$cfg.wa.max_join } } catch {}
+      $high = 0; $pend = 0; $joined = 0; $appr = 0; $bad = 0
+      foreach ($it in $items) {
+        $rel = [string]$it.relevance; $st = [string]$it.status; $jn = [string]$it.join
+        if ($rel -eq "high") { $high++ }
+        if ($st -eq "待验证" -or $st -eq "待确认") { $pend++ }
+        if ($jn -eq "已加入" -or $jn -eq "已在群内") { $joined++ }
+        if ($jn -like "已提交待审批*") { $appr++ }
+        if ($st -eq "已失效" -or $st -eq "访问失败" -or $st -eq "需登录") { $bad++ }
+      }
+      $sorted = @($items | Sort-Object @{ Expression = { if ([string]$_.relevance -eq "high") { 0 } elseif ([string]$_.relevance -eq "medium") { 1 } elseif ([string]$_.relevance -eq "pending") { 2 } else { 3 } } })
+      if ($sorted.Count -gt 300) { $sorted = $sorted[0..299] }
+      Send-Json $ctx 200 @{ ok = $true; items = $sorted; stats = @{ total = $items.Count; high = $high; pending = $pend; joined = $joined; approval = $appr; bad = $bad; queries = $queries; mode = $mode; maxJoin = $maxJoin } }
       continue
     }
 
@@ -977,6 +1018,31 @@ while ($listener.IsListening) {
         Start-Process -FilePath "powershell.exe" -ArgumentList $sa -WindowStyle Hidden
         Add-Event "[hub] Steam 每日流程已启动"
         Send-Json $ctx 200 @{ ok = $true; phase = "steam" }
+        continue
+      }
+      if ($body.action -eq "wa") {
+        $stage = "search"
+        if ($body.PSObject.Properties.Name -contains "stage") { $stage = [string]$body.stage }
+        $dis = Join-Path $PSScriptRoot "wa_discover.ps1"
+        $ver = Join-Path $PSScriptRoot "wa_verify.ps1"
+        if ($stage -eq "search" -or $stage -eq "all") {
+          if (-not (Test-Path $dis)) { Send-Json $ctx 500 @{ ok = $false; error = "wa_discover_missing" }; continue }
+          $mq = 12
+          if ($body.PSObject.Properties.Name -contains "maxQueries") { $mq = [int]$body.maxQueries }
+          $da = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ("`"" + $dis + "`""), "-MaxQueries", [string]$mq)
+          Start-Process -FilePath "powershell.exe" -ArgumentList $da -WindowStyle Hidden
+          Add-Event ("[hub] WhatsApp 搜索已启动 (maxQueries=" + $mq + ")")
+        }
+        if ($stage -eq "verify" -or $stage -eq "all") {
+          if (-not (Test-Path $ver)) { Send-Json $ctx 500 @{ ok = $false; error = "wa_verify_missing" }; continue }
+          $mv = 8
+          if ($body.PSObject.Properties.Name -contains "maxVerify") { $mv = [int]$body.maxVerify }
+          $va = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ("`"" + $ver + "`""), "-MaxVerify", [string]$mv)
+          Start-Process -FilePath "powershell.exe" -ArgumentList $va -WindowStyle Hidden
+          Add-Event ("[hub] WhatsApp 验证已启动 (maxVerify=" + $mv + ")")
+        }
+        $state.phase = "wa"
+        Send-Json $ctx 200 @{ ok = $true; stage = $stage }
         continue
       }
       if ($body.action -eq "start") {

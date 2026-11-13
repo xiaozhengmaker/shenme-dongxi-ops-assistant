@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>WhatsApp 群发现 · 社么东西</title>
+<style>
+  :root { --line:#E6E8EC; --muted:#8A9099; --ink:#1D2129; --brand:#1FA855; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#F5F6F7; color:var(--ink); font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:14px 20px; background:#fff; border-bottom:1px solid var(--line); }
+  .logo { width:26px; height:26px; border-radius:8px; background:#0A6BFF; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; }
+  h1 { font-size:15px; margin:0; }
+  .sp { flex:1; }
+  button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:7px 12px; cursor:pointer; font-size:13px; }
+  button.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+  button:disabled { opacity:.55; cursor:not-allowed; }
+  main { max-width:1280px; margin:0 auto; padding:18px 20px 60px; }
+  .cards { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .card b { display:block; font-size:22px; line-height:1.2; }
+  .card span { color:var(--muted); font-size:12px; }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { background:#FAFBFC; color:#5A6066; font-weight:600; white-space:nowrap; }
+  code { background:#F2F3F5; padding:1px 5px; border-radius:4px; font-size:12px; }
+  .tag { display:inline-block; padding:1px 7px; border-radius:999px; font-size:12px; }
+  .t-high { background:#E6F6EC; color:#12693A; }
+  .t-pending { background:#FFF4E5; color:#9A5B00; }
+  .t-bad { background:#FDECEC; color:#B42318; }
+  .t-ok { background:#E8F0FE; color:#1A56C4; }
+  .muted { color:var(--muted); }
+  .empty { padding:28px; text-align:center; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">?</div>
+  <h1>WhatsApp 群发现</h1>
+  <span class="muted" id="mode"></span>
+  <div class="sp"></div>
+  <button onclick="location.href='/'">返回看板</button>
+  <button id="btnSearch">执行搜索</button>
+  <button class="primary" id="btnVerify">验证待确认</button>
+</header>
+<main>
+  <div class="cards">
+    <div class="card"><b id="nTotal">0</b><span>候选群（去重）</span></div>
+    <div class="card"><b id="nHigh">0</b><span>高相关</span></div>
+    <div class="card"><b id="nPending">0</b><span>待验证</span></div>
+    <div class="card"><b id="nJoined">0</b><span>已加入</span></div>
+    <div class="card"><b id="nApproval">0</b><span>待审批</span></div>
+    <div class="card"><b id="nBad">0</b><span>失效/失败</span></div>
+  </div>
+  <div class="panel">
+    <table>
+      <thead><tr><th>群名</th><th>地区</th><th>语言</th><th>用途</th><th>邀请链接</th><th>来源</th><th>验证</th><th>加群</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="8" class="empty">加载中…</td></tr></tbody>
+    </table>
+  </div>
+</main>
+<script>
+function tag(cls, text) { return '<span class="tag ' + cls + '">' + (text || '未知') + '</span>'; }
+function relTag(r) {
+  if (r === 'high') return tag('t-high', '高相关');
+  if (r === 'medium') return tag('t-ok', '中相关');
+  if (r === 'exclude') return tag('t-bad', '排除');
+  return tag('t-pending', '待确认');
+}
+async function load() {
+  try {
+    const r = await fetch('/api/wa');
+    const d = await r.json();
+    const s = d.stats || {};
+    document.getElementById('nTotal').textContent = s.total || 0;
+    document.getElementById('nHigh').textContent = s.high || 0;
+    document.getElementById('nPending').textContent = s.pending || 0;
+    document.getElementById('nJoined').textContent = s.joined || 0;
+    document.getElementById('nApproval').textContent = s.approval || 0;
+    document.getElementById('nBad').textContent = s.bad || 0;
+    document.getElementById('mode').textContent = '模式：' + (s.mode || 'search_only') + ' · 上限 ' + (s.maxJoin || 0) + ' · 已执行查询 ' + (s.queries || 0);
+    const items = d.items || [];
+    const tb = document.getElementById('rows');
+    if (!items.length) { tb.innerHTML = '<tr><td colspan="8" class="empty">还没有候选群，点「执行搜索」开始</td></tr>'; return; }
+    tb.innerHTML = items.map(function (it) {
+      const src = (it.sources && it.sources[0]) ? '<a href="' + it.sources[0].url + '" target="_blank" rel="noopener">查询</a>' : '—';
+      return '<tr><td><b>' + (it.name || '（未读到群名）') + '</b></td><td>' + (it.region || '未知') + '</td><td>' + (it.lang || '未知') + '</td><td>' + (it.purpose || '未知') + '</td>'
+        + '<td><code>chat.whatsapp.com/' + it.code + '</code></td><td>' + src + '</td><td>' + relTag(it.relevance) + '<br><span class="muted">' + (it.status || '') + '</span></td><td>' + (it.join || '未加入') + '</td></tr>';
+    }).join('');
+  } catch (e) {
+    document.getElementById('rows').innerHTML = '<tr><td colspan="8" class="empty">读取失败：' + e.message + '</td></tr>';
+  }
+}
+async function post(action, extra) {
+  const body = Object.assign({ action: action }, extra || {});
+  const r = await fetch('/control', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  return r.json();
+}
+document.getElementById('btnSearch').addEventListener('click', async function () {
+  this.disabled = true; this.textContent = '搜索中…';
+  try { await post('wa', { stage: 'search', maxQueries: 12 }); } catch (e) {}
+  setTimeout(function () { document.getElementById('btnSearch').disabled = false; document.getElementById('btnSearch').textContent = '执行搜索'; load(); }, 6000);
+});
+document.getElementById('btnVerify').addEventListener('click', async function () {
+  this.disabled = true; this.textContent = '验证中…';
+  try { await post('wa', { stage: 'verify', maxVerify: 8 }); } catch (e) {}
+  setTimeout(function () { document.getElementById('btnVerify').disabled = false; document.getElementById('btnVerify').textContent = '验证待确认'; load(); }, 6000);
+});
+load();
+setInterval(load, 15000);
+</script>
+</body>
+</html>
