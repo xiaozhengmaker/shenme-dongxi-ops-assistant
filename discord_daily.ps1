@@ -13,6 +13,7 @@ $baseDir = $PSScriptRoot
 if (-not $baseDir) { $baseDir = "D:\DeepSeek\运营" }
 . (Join-Path $baseDir "lib\feishu.ps1")
 . (Join-Path $baseDir "lib\db.ps1")
+. (Join-Path $baseDir "lib\stop.ps1")
 
 $cdp = Join-Path $baseDir "cdp_call.ps1"
 $dataDir = Join-Path $baseDir "data"
@@ -165,6 +166,7 @@ foreach ($g in $guilds) {
   if ($totalUsers -ge $MaxUsers) { break }
   if ($idx -ge $MaxGuilds) { break }
   $idx++
+  if (Test-GOpsStop $baseDir) { Say 'stop flag -> exit'; break }
   $js = $guildJs.Replace("<ID>", [string]$g.id).Replace("<PER>", [string]$PerGuild).Replace("<DELAY>", [string]$DelayMs)
   $res = Cdp $js
   if (-not $res) { Say ($g.name + " -> no response"); continue }

@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = "Continue"
 $baseDir = Split-Path -Parent $PSCommandPath
+. (Join-Path $baseDir "lib\stop.ps1")
 . (Join-Path $baseDir "lib\feishu.ps1")
 . (Join-Path $baseDir "lib\db.ps1")
 
@@ -146,6 +147,7 @@ foreach ($g in $targets) {
 
   $batchStart = $startPage
   for ($p = $startPage; $p -le $endPage; $p++) {
+    if (Test-GOpsStop $baseDir) { Say 'stop flag -> exit'; exit 0 }
     $url = "https://steamcommunity.com/groups/$slug/memberslistxml/?xml=1&p=$p"
     $content = $null
     for ($try = 1; $try -le 6; $try++) {

@@ -49,6 +49,7 @@ if ($chkLast -notmatch "可以开工") {
 $Platforms = @($Platforms | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $Platforms = @($Platforms | Where-Object { $cfgPlatforms -or $true })
 foreach ($p in $Platforms) {
+  if (Test-GOpsStop $baseDir) { Say 'stop flag -> 退出'; exit 0 }
   if ($SkipMembers -and $false) { }
   Say ("--- 平台 " + $p + " 拓群开始")
   try { Hub "POST" "/control" @{ action = "start"; platform = $p } | Out-Null } catch { Say ("启动失败 " + $p + "：" + $_.Exception.Message); $fail += $p; continue }

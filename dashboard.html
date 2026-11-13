@@ -411,6 +411,7 @@ function render(){
   document.getElementById('todayProgress').textContent = t.todayGroups + ' / ' + (quota||0);
   document.getElementById('todayBar').style.width = quota ? Math.min(100, t.todayGroups/quota*100) + '%' : '0%';
   document.getElementById('runState').textContent = (DATA.running? '运行中 · ':'') + (DATA.phase||'idle');
+try { syncRunButtons(DATA); } catch(e) {}
 
   drawChart();
   drawDist(byPlat, t);
@@ -627,6 +628,17 @@ document.getElementById('btnBack').addEventListener('click', function(){
   document.getElementById('detail').classList.remove('show');
   document.getElementById('overview').classList.remove('hide');
 });
+
+function syncRunButtons(d){
+  var b = document.getElementById('btnStart');
+  if (!b) return;
+  var on = !!(d && d.running);
+  b.disabled = on;
+  b.style.opacity = on ? '0.45' : '1';
+  b.style.cursor = on ? 'not-allowed' : 'pointer';
+  b.title = on ? '正在运行中，先停止再启动' : '';
+}
+
 document.getElementById('btnStart').addEventListener('click', async function(){
   var r = await fetch('/control', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'pipeline'})});
   var j = null; try { j = await r.json(); } catch(e){}

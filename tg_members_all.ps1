@@ -19,6 +19,7 @@ if ($Limit -gt 0) { $tg = $tg | Select-Object -First $Limit }
 $i = 0
 $report = @()
 foreach ($g in $tg) {
+  if (Test-GOpsStop $baseDir) { "[stop] flag found, exit"; exit 0 }
   $i++
   $u = $g.key.TrimStart("@")
   "[$i/$($tg.Count)] $u ..."

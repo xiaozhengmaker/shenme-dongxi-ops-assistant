@@ -7,6 +7,7 @@ param([int]$Port = 8787, [int]$QuotaOverride = 0, [string]$Platform = "Telegram"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $here "lib\feishu.ps1")
 . (Join-Path $here "lib\db.ps1")
+. (Join-Path $here "lib\stop.ps1")
 
 $cfgPath = Join-Path $here "config.json"
 $cfg = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -992,6 +993,7 @@ while ($listener.IsListening) {
     if ($path -eq "/control" -and $req.HttpMethod -eq "POST") {
       $body = (New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
       if ($body.action -eq "pipeline") {
+  try { Clear-GOpsStop $baseDir } catch {}
         # 一键全流程：交给 run_all.ps1 串行调度（拓群 -> 成员 -> 回填 -> Steam -> Reddit）
         $ra = Join-Path $PSScriptRoot "run_all.ps1"
         if (-not (Test-Path $ra)) {
@@ -1046,6 +1048,7 @@ while ($listener.IsListening) {
         continue
       }
       if ($body.action -eq "start") {
+  try { Clear-GOpsStop $baseDir } catch {}
         if ($body.platform) {
           $want = [string]$body.platform
           $known = @()
@@ -1070,7 +1073,7 @@ while ($listener.IsListening) {
         }
         Write-Host (Start-Run)
       }
-      elseif ($body.action -eq "stop") { $state.running = $false; $state.phase = "idle"; Write-Host "[hub] stopped" }
+      elseif ($body.action -eq "stop") { $state.running = $false; $state.phase = "idle"; try { Set-GOpsStop $baseDir ("hub stop " + (Get-Date).ToString("HH:mm:ss")) | Out-Null } catch {}; Write-Host "[hub] stopped" }
       Send-Json $ctx 200 @{ ok = $true; phase = $state.phase }
       continue
     }
