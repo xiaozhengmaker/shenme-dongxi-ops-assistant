@@ -45,6 +45,9 @@ if ($chkLast -notmatch "可以开工") {
 }
 
 # 1) 逐平台拓群
+# -File 传参会把 "Telegram,Facebook,Reddit" 当成单个字符串，这里拆开
+$Platforms = @($Platforms | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$Platforms = @($Platforms | Where-Object { $cfgPlatforms -or $true })
 foreach ($p in $Platforms) {
   if ($SkipMembers -and $false) { }
   Say ("--- 平台 " + $p + " 拓群开始")

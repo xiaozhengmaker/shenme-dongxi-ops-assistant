@@ -1,5 +1,5 @@
 ﻿param(
-  [int]$MaxUsers = 2000,
+  [int]$MaxUsers = -1,
   [int]$PerGuild = 300,
   [int]$MaxGuilds = 12,
   [int]$DelayMs = 1500,
@@ -115,6 +115,18 @@ if (-not $head -or -not $head.ok) {
 $guilds = @($head.guilds)
 Say ("cs guilds found=" + $guilds.Count)
 Ev ("discord daily start (cs=" + $guilds.Count + ")")
+
+# 是否读成员：命令行 > config.discord.read_members/max_users_per_day
+try {
+  $cfgD = Get-Content (Join-Path $baseDir "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+  $dc = $cfgD.discord
+  if ($MaxUsers -lt 0) {
+    if ($dc -and ($dc.PSObject.Properties.Name -contains "max_users_per_day")) { $MaxUsers = [int]$dc.max_users_per_day } else { $MaxUsers = 0 }
+  }
+  if ($dc -and ($dc.PSObject.Properties.Name -contains "read_members") -and -not [bool]$dc.read_members) { $MaxUsers = 0; $SkipMembers = $true }
+} catch { if ($MaxUsers -lt 0) { $MaxUsers = 0 } }
+if ($MaxUsers -le 0) { $SkipMembers = $true }
+Say ("member sampling " + $(if ($SkipMembers) { "disabled" } else { "max=" + $MaxUsers }))
 
 $cov = New-Object System.Collections.ArrayList
 $rows = New-Object System.Collections.ArrayList
