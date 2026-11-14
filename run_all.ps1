@@ -5,6 +5,7 @@ param(
   [switch]$SkipMembers,
   [switch]$SkipSteam,
   [switch]$Report,
+  [switch]$NoReport,
   [switch]$Fast,
   [int]$WaitTimeoutMin = 90
 )
@@ -100,11 +101,12 @@ if (-not $SkipSteam) {
   } catch { Say ("  db sync failed: " + $_.Exception.Message) }
 }
 
-# 4) 日报（可选）
-if ($Report) {
+# 4) 日报：默认在跑完后发（-NoReport 可跳过；-Report 保留兼容）
+$autoReport = (-not $NoReport) -or $Report
+if ($autoReport) {
   Say "--- 发日报"
   $out5 = powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $baseDir "report_all.ps1") 2>&1
-  ($out5 | Select-String "webhook|合计" | Select-Object -Last 2) | ForEach-Object { Say ("  " + $_.Line) }
+  ($out5 | Select-String "webhook|合计|failed|error" | Select-Object -Last 3) | ForEach-Object { Say ("  " + $_.Line) }
 }
 
 try { Hub "POST" "/control" @{ action = "stop" } | Out-Null } catch { }
