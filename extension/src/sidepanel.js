@@ -1,6 +1,7 @@
 ﻿
 // —— 扩展上下文守卫：扩展被重新加载后，已打开的页面会失去 chrome.* API ——
-const CTX_ALIVE = !!(window.chrome && chrome.runtime && chrome.runtime.id);
+function ctxAlive() { try { return !!(window.chrome && chrome.runtime && chrome.runtime.id); } catch (e) { return false; } }
+let CTX_ALIVE = ctxAlive();
 function showDeadContext() {
   const box = document.getElementById("offline");
   if (box) {
@@ -28,7 +29,7 @@ async function loadSummary() {
 }
 
 async function send(type) {
-  if (!CTX_ALIVE) return null;
+  if (!ctxAlive()) return null;
   for (let i = 0; i < 3; i++) {
     try {
       const r = await chrome.runtime.sendMessage({ type });
@@ -265,20 +266,26 @@ async function refreshLive() {
   var b = document.getElementById("btnOpen");
   if (!b) return;
   b.addEventListener("click", function () {
-    if (!CTX_ALIVE) { showDeadContext(); return; }
+    if (!ctxAlive()) { showDeadContext(); return; }
     try { chrome.tabs.create({ url: "http://127.0.0.1:8787/" }); }
     catch (e) { b.textContent = "打开失败"; }
   });
 })();
 
-if (!CTX_ALIVE) { showDeadContext(); } else {
+CTX_ALIVE = ctxAlive();
+// 平台列表只依赖 hub 的 HTTP 接口，与扩展上下文无关，必须无条件渲染
 loadPlatforms();
 loadSummary().then(refresh);
 setTimeout(refresh, 800);
 setTimeout(refresh, 2400);
 setInterval(refresh, 2000);
 setInterval(refreshLive, 2000);
-setInterval(refreshPlatLights, 10000);
 setTimeout(refreshLive, 600);
 setInterval(() => { loadSummary().then(refresh); }, 15000);
+if (CTX_ALIVE) {
+  setInterval(refreshPlatLights, 10000);
+} else {
+  showDeadContext();
+  // 扩展被 reload 后，旧页面会自动恢复上下文：检测到就自刷新
+  setInterval(function () { if (ctxAlive()) location.reload(); }, 3000);
 }
