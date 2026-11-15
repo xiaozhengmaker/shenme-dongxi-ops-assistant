@@ -758,6 +758,18 @@ setInterval(load, 15000);
 (function(){
   var KEYMAP = {facebook:'facebook',telegram:'telegram',discord:'discord',reddit:'reddit',whatsapp:'whatsapp',steam:'steam'};
   function btnEl(){ return document.getElementById('btnPreload'); }
+  function hubProbe(){
+    var row = document.getElementById('plHubRow');
+    if (!row) return;
+    row.innerHTML = '<b style="width:82px">本地后台</b><span style="width:70px;color:#8F959E">检测中…</span><span style="flex:1"></span>';
+    fetch('http://127.0.0.1:8787/health', {cache:'no-store'}).then(function(r){ return r.json(); }).then(function(j){
+      row.innerHTML = '<b style="width:82px">本地后台</b><span style="width:70px;color:#2BA471">已连接</span>'
+        + '<span style="flex:1;color:#646A73;font-size:12px">127.0.0.1:8787 · phase=' + (j.phase||'-') + (j.running?' · 运行中':'') + '</span>';
+    }).catch(function(){
+      row.innerHTML = '<b style="width:82px">本地后台</b><span style="width:70px;color:#D83931">未启动</span>'
+        + '<span style="flex:1;color:#646A73;font-size:12px">看门狗每 5 分钟自动拉起；也可运行 hub_watch.ps1</span>';
+    });
+  }
   window.addEventListener('message', function(ev){
     if (ev.source !== window) return;
     var d = ev.data || {};
@@ -779,6 +791,11 @@ setInterval(load, 15000);
     box.style.display='block';
     box.style.opacity = '1';
     box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>预载结果</b><span style="display:flex;gap:12px;align-items:center"><span class="pl-recheck" style="cursor:pointer;color:#3370FF">重新检测</span><span style="cursor:pointer;color:#8F959E" onclick="this.parentNode.parentNode.parentNode.style.display=\'none\'">关闭</span></span></div>'+rows;
+    var hr = document.createElement('div');
+    hr.id = 'plHubRow';
+    hr.style.cssText = 'display:flex;gap:10px;align-items:center;padding:3px 0;border-top:1px dashed #E5E6EB;margin-top:4px';
+    box.appendChild(hr);
+    hubProbe();
   });
   document.addEventListener('click', function(e){
     var rcl = e.target.closest && e.target.closest('.pl-recheck');
@@ -787,6 +804,7 @@ setInterval(load, 15000);
       if (box2) box2.style.opacity = '0.55';
       var plats2 = (typeof enabled !== 'undefined' ? enabled : []).map(function(k){ return KEYMAP[k] || k; });
       window.postMessage({ __dshPreload: true, platforms: plats2, recheck: true }, '*');
+      hubProbe();
       return;
     }
     var b = e.target.closest && e.target.closest('#btnPreload');

@@ -6,7 +6,10 @@ $logDir = Join-Path $root "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir "hub.log"
 "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] run_hub start platform=$Platform pid=$PID" | Out-File -FilePath $log -Encoding utf8 -Append
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "hub.ps1") -Platform $Platform *>> $log
-$code = $LASTEXITCODE
+$hubOut = Join-Path $logDir "hub.out.log"
+$hubErr = Join-Path $logDir "hub.err.log"
+$child = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-WindowStyle","Hidden","-File",(Join-Path $root "hub.ps1"),"-Platform",$Platform) -WindowStyle Hidden -RedirectStandardOutput $hubOut -RedirectStandardError $hubErr -PassThru
+$child.WaitForExit()
+$code = $child.ExitCode
 "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] hub exited code=$code" | Out-File -FilePath $log -Encoding utf8 -Append
 exit $code
