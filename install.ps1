@@ -55,16 +55,17 @@ if ($SkipTasks) { Warn "已跳过（-SkipTasks）" }
 else {
   $ps = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File"
   $tasks = @(
-    @{ n = "DSH_SocialOps_Steam";  tr = "$ps `"$root\steam_daily.ps1`" -MaxPages 40 -DelayMs 12000"; s = "09:30" },
-    @{ n = "DSH_SocialOps_Daily";  tr = "$ps `"$root\run_daily.ps1`"";  s = "10:00" },
-    @{ n = "DSH_SocialOps_Report"; tr = "$ps `"$root\report_all.ps1`""; s = "21:00" },
-    @{ n = "DSH_SocialOps_Hub";    tr = "$ps `"$root\run_hub.ps1`"";    s = "" }
+    @{ n = "DSH_SocialOps_Steam";    k = "daily";  s = "09:30"; tr = "$ps `"$root\steam_daily.ps1`" -MaxPages 40 -DelayMs 12000" },
+    @{ n = "DSH_SocialOps_Daily";    k = "daily";  s = "10:00"; tr = "$ps `"$root\run_daily.ps1`"" },
+    @{ n = "DSH_SocialOps_Report";   k = "daily";  s = "21:00"; tr = "$ps `"$root\report_all.ps1`"" },
+    @{ n = "DSH_SocialOps_Hub";      k = "logon";              tr = "$ps `"$root\run_hub.ps1`"" },
+    @{ n = "DSH_SocialOps_HubWatch"; k = "minute"; m = 5;      tr = "$ps `"$root\hub_watch.ps1`"" }
   )
   foreach ($t in $tasks) {
-    if ($t.s) {
-      $null = schtasks.exe /Create /TN $t.n /TR $t.tr /SC DAILY /ST $t.s /F /RL LIMITED 2>&1
-    } else {
-      $null = schtasks.exe /Create /TN $t.n /TR $t.tr /SC ONLOGON /F /RL LIMITED 2>&1
+    switch ($t.k) {
+      "daily"  { $null = schtasks.exe /Create /TN $t.n /TR $t.tr /SC DAILY  /ST $t.s /F /RL LIMITED 2>&1 }
+      "logon"  { $null = schtasks.exe /Create /TN $t.n /TR $t.tr /SC ONLOGON          /F /RL LIMITED 2>&1 }
+      "minute" { $null = schtasks.exe /Create /TN $t.n /TR $t.tr /SC MINUTE /MO $t.m  /F /RL LIMITED 2>&1 }
     }
     if ($LASTEXITCODE -eq 0) { Ok $t.n } else { Warn ($t.n + " 注册失败") }
   }
