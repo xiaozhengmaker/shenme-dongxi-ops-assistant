@@ -106,9 +106,19 @@
       <section class="pane" id="s5" style="margin-top:16px">
         <h2>🤖 AI 怎么帮忙</h2>
         <div class="sub">三段提示词都可改。P1 改方向时跑一次，P2 每条信号一次（最耗），P3 每天一次。</div>
-        <div class="row"><div class="field" style="flex:1"><label>供应商</label><input class="inp" placeholder="openai / deepseek / 自定义" disabled></div>
-          <div class="field" style="flex:1"><label>模型</label><input class="inp" placeholder="gpt-4o-mini / deepseek-chat" disabled></div></div>
-        <div class="field"><label>API Key</label><input class="inp" type="password" placeholder="保存在本机 config.json，不进 git" disabled></div>
+        <div class="row">
+          <div class="field" style="flex:1"><label>供应商</label><input class="inp" id="aiProvider" placeholder="deepseek / openai / 自定义"></div>
+          <div class="field" style="flex:1"><label>接口地址</label><input class="inp" id="aiBase" placeholder="https://api.deepseek.com"></div>
+          <div class="field" style="flex:1"><label>模型</label><input class="inp" id="aiModel" placeholder="deepseek-chat"></div>
+        </div>
+        <div class="field"><label>API Key <span id="aiKeyState" class="en"></span></label>
+          <input class="inp" id="aiKey" type="password" placeholder="粘贴后点保存；只存在本机 config.json，不进 git">
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin:6px 0 12px">
+          <button class="btn primary" id="aiSave" type="button">保存</button>
+          <button class="btn" id="aiTest" type="button">测试连接</button>
+          <span id="aiMsg" class="en"></span>
+        </div>
         <details open>
           <summary>三段提示词（可改，第二步开放编辑）</summary>
           <div class="prompt"><div class="h">P1 · 解析我的生意 <span class="tag">改方向时</span></div>
@@ -226,6 +236,57 @@
       a.classList.add('on');
     });
   });
+})();
+</script>
+<script>
+(function () {
+  var HUB = 'http://127.0.0.1:8787';
+  function q(id) { return document.getElementById(id); }
+  function msg(s, bad) { var e = q('aiMsg'); e.textContent = s; e.style.color = bad ? '#b91c1c' : '#0f766e'; }
+
+  fetch(HUB + '/api/config').then(function (r) { return r.json(); }).then(function (c) {
+    var a = c.ai || {};
+    q('aiProvider').value = a.provider || 'deepseek';
+    q('aiBase').value = a.base_url || 'https://api.deepseek.com';
+    q('aiModel').value = a.model || 'deepseek-chat';
+    if (a.has_key) {
+      q('aiKey').placeholder = '已保存：' + (a.api_key_masked || '****') + '（留空表示不修改）';
+      q('aiKeyState').textContent = '已配置';
+      q('aiKeyState').style.color = '#0f766e';
+    } else {
+      q('aiKeyState').textContent = '未配置';
+      q('aiKeyState').style.color = '#b45309';
+    }
+  });
+
+  q('aiSave').onclick = function () {
+    var body = { ai: {
+      provider: q('aiProvider').value.trim(),
+      base_url: q('aiBase').value.trim(),
+      model: q('aiModel').value.trim()
+    } };
+    var k = q('aiKey').value.trim();
+    if (k) { body.ai.api_key = k; }
+    msg('保存中…');
+    fetch(HUB + '/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); }).then(function () {
+      msg('已保存');
+      q('aiKey').value = '';
+      if (k) { q('aiKeyState').textContent = '已配置'; q('aiKeyState').style.color = '#0f766e'; }
+    }).catch(function (e) { msg('保存失败：' + e.message, true); });
+  };
+
+  q('aiTest').onclick = function () {
+    msg('测试中…');
+    fetch(HUB + '/api/ai/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (r) { return r.json(); }).then(function (d) {
+        if (d.ok) { msg('连接成功 · ' + d.model + ' · 回复「' + d.reply + '」'); }
+        else { msg('失败：' + (d.error || 'unknown'), true); }
+      }).catch(function (e) { msg('失败：' + e.message, true); });
+  };
 })();
 </script>
 </body>

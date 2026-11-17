@@ -9,6 +9,7 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $here "lib\db.ps1")
 . (Join-Path $here "lib\stop.ps1")
 . (Join-Path $here "lib\profile.ps1")
+. (Join-Path $here "lib\ai.ps1")
 
 $cfgPath = Join-Path $here "config.json"
 $cfg = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -737,7 +738,22 @@ while ($listener.IsListening) {
           if ($st) { $dbInfo.rows = [int64]$st.rows; $dbInfo.groups = [int]$st.groups }
         }
       } catch { $dbInfo.error = [string]$_.Exception.Message }
-      Send-Json $ctx 200 @{ outputs = $cfg.outputs; schedule = $cfg.schedule; quotas = $cfg.quotas; platforms = $cfg.platforms; platformsEnabled = $cfg.platformsEnabled; behaviors = $cfg.behaviors; reserved = $cfg.reserved; notify = $cfg.notify; db = $dbInfo; taskName = "DSH_SocialOps_Daily"; tasks = (Get-Tasks) }
+      $aiOut = @{ has_key = $false; provider = ""; base_url = ""; model = ""; max_batch = 10; api_key_masked = "" }
+      try {
+        if ($cfg.ai) {
+          $aiOut.provider = [string]$cfg.ai.provider
+          $aiOut.base_url = [string]$cfg.ai.base_url
+          $aiOut.model    = [string]$cfg.ai.model
+          if ($cfg.ai.max_batch) { $aiOut.max_batch = [int]$cfg.ai.max_batch }
+          $k = [string]$cfg.ai.api_key
+          if (-not $k -and $cfg.ai.api_key_env) { $k = [string](Get-Item ("env:" + [string]$cfg.ai.api_key_env) -ErrorAction SilentlyContinue).Value }
+          if ($k) {
+            $aiOut.has_key = $true
+            if ($k.Length -le 8) { $aiOut.api_key_masked = "****" } else { $aiOut.api_key_masked = $k.Substring(0, 3) + "…" + $k.Substring($k.Length - 4) }
+          }
+        }
+      } catch { }
+      Send-Json $ctx 200 @{ outputs = $cfg.outputs; schedule = $cfg.schedule; quotas = $cfg.quotas; platforms = $cfg.platforms; platformsEnabled = $cfg.platformsEnabled; behaviors = $cfg.behaviors; reserved = $cfg.reserved; notify = $cfg.notify; db = $dbInfo; ai = $aiOut; taskName = "DSH_SocialOps_Daily"; tasks = (Get-Tasks) }
       continue
     }
 
@@ -756,7 +772,26 @@ while ($listener.IsListening) {
         if ($body.schedule.PSObject.Properties.Name -contains "enabled") { $cfg.schedule.enabled = [bool]$body.schedule.enabled }
         if ($body.schedule.time) { $cfg.schedule.time = [string]$body.schedule.time }
       }
-            if ($body.notify) { $cfg | Add-Member -NotePropertyName notify -NotePropertyValue $body.notify -Force }
+            if ($body.ai) {
+        if (-not $cfg.ai) { $cfg | Add-Member -NotePropertyName ai -NotePropertyValue ([pscustomobject]@{}) -Force }
+        foreach ($ak in @("provider","base_url","model","api_key","api_key_env")) {
+          if ($body.ai.PSObject.Properties.Name -contains $ak) {
+            $val = [string]$body.ai.$ak
+            if ($ak -eq "api_key" -and ($val -eq "" -or $val -match "^(\*+|•+|x+)$")) { continue }
+            if (-not ($cfg.ai.PSObject.Properties.Name -contains $ak)) {
+              $cfg.ai | Add-Member -NotePropertyName $ak -NotePropertyValue $val -Force
+            } else { $cfg.ai.$ak = $val }
+          }
+        }
+        foreach ($ak2 in @("max_batch","timeout_sec")) {
+          if ($body.ai.PSObject.Properties.Name -contains $ak2) {
+            if (-not ($cfg.ai.PSObject.Properties.Name -contains $ak2)) {
+              $cfg.ai | Add-Member -NotePropertyName $ak2 -NotePropertyValue ([int]$body.ai.$ak2) -Force
+            } else { $cfg.ai.$ak2 = [int]$body.ai.$ak2 }
+          }
+        }
+      }
+      if ($body.notify) { $cfg | Add-Member -NotePropertyName notify -NotePropertyValue $body.notify -Force }
       if ($body.behaviors) {
         foreach ($bp in $body.behaviors.PSObject.Properties.Name) {
           if (-not $cfg.behaviors.$bp) {
@@ -1079,6 +1114,18 @@ while ($listener.IsListening) {
         $ctx.Response.OutputStream.Write($hb3, 0, $hb3.Length)
         $ctx.Response.Close()
       } else { Send-Json $ctx 404 @{ error = "leads.html missing" } }
+      continue
+    }
+
+    if ($path -eq "/api/ai/test" -and $req.HttpMethod -eq "POST") {
+      $aiT = Get-AiConfig $script:Cfg
+      if (-not $aiT) { Send-Json $ctx 200 @{ ok = $false; error = "no_key" }; continue }
+      $ping = Invoke-AiChat $aiT "只回答一个字：好" "ping" ""
+      if ($ping.ok) {
+        Send-Json $ctx 200 @{ ok = $true; model = $aiT.model; reply = ([string]$ping.text).Trim(); tokens = $ping.usage.total_tokens }
+      } else {
+        Send-Json $ctx 200 @{ ok = $false; error = [string]$ping.error }
+      }
       continue
     }
 
