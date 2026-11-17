@@ -148,7 +148,7 @@ $list = @()
 foreach ($r in $uniq.Values) {
   $k = ($r.author + "|" + $r.title)
   $spam = ($authorTitle[$k] -gt 2)
-  $store = ($r.title -match '^\s*\[(store|h|w|q)\]')
+  $store = ($r.title -match '^\s*\[(store|h|w)\]')
   $r | Add-Member -NotePropertyName spam -NotePropertyValue $spam -Force
   $r | Add-Member -NotePropertyName store -NotePropertyValue $store -Force
   $list += $r

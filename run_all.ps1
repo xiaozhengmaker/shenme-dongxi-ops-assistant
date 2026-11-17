@@ -4,6 +4,7 @@ param(
   [string[]]$Platforms = @("Telegram","Facebook","Reddit"),
   [switch]$SkipMembers,
   [switch]$SkipSteam,
+  [switch]$SkipLeads,
   [switch]$Report,
   [switch]$NoReport,
   [switch]$Fast,
@@ -111,4 +112,15 @@ if ($autoReport) {
 
 try { Hub "POST" "/control" @{ action = "stop" } | Out-Null } catch { }
 if ($fail.Count -gt 0) { Say ("=== run_all 结束，失败平台：" + ($fail -join ",") + " ==="); exit 4 }
+if (-not $SkipLeads) {
+  if (Test-GOpsStop $baseDir) { Say "STOP flag present, skip leads" }
+  else {
+    Say "--- 线索流水线（扫描/打分/入库）"
+    try {
+      & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $baseDir "leads_daily.ps1") | Out-Null
+      Say "leads ok"
+    } catch { Say ("leads failed: " + $_.Exception.Message) }
+  }
+}
+
 Say "=== run_all 全部完成 ==="

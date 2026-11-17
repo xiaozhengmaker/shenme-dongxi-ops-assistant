@@ -38,6 +38,27 @@ CREATE INDEX IF NOT EXISTS idx_users_plat ON users(platform);
 CREATE INDEX IF NOT EXISTS idx_users_uid  ON users(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_name ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_grp  ON users(group_id);
+
+-- 线索表：一条帖子/一条评论 = 一行
+CREATE TABLE IF NOT EXISTS leads (
+  url          TEXT PRIMARY KEY,
+  platform     TEXT,
+  sub          TEXT,
+  keyword      TEXT,
+  title        TEXT,
+  author       TEXT,
+  comments     TEXT,
+  time_text    TEXT,
+  intent_rule  TEXT,
+  ai_intent    TEXT,
+  ai_is_lead   INTEGER,
+  ai_relevance REAL,
+  ai_reason    TEXT,
+  scanned_at   TEXT,
+  scored_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_leads_lead ON leads(ai_is_lead);
+CREATE INDEX IF NOT EXISTS idx_leads_kw   ON leads(keyword);
 """
 
 # users.csv 表头 -> 库字段
@@ -202,6 +223,64 @@ def cmd_vacuum():
     print(json.dumps({"ok": True, "path": DB_PATH}, ensure_ascii=True))
 
 
+def cmd_leads(argv):
+    """leads <signals.json> [scored.json]  -- 信号入库，可选覆盖 AI 结果"""
+    if not argv:
+        print("usage: leads <signals.json> [scored.json]")
+        sys.exit(1)
+    sig_path = argv[0]
+    sco_path = argv[1] if len(argv) > 1 else ""
+    signals = {}
+    with open(sig_path, "r", encoding="utf-8") as f:
+        sig = json.load(f)
+    for it in sig.get("items", []):
+        u = (it.get("url") or "").strip()
+        if not u:
+            continue
+        signals[u] = it
+    scored = {}
+    if sco_path and os.path.exists(sco_path):
+        with open(sco_path, "r", encoding="utf-8") as f:
+            sco = json.load(f)
+        for it in sco.get("items", []):
+            u = (it.get("url") or "").strip()
+            if u:
+                scored[u] = it
+    conn = connect()
+    conn.executescript(SCHEMA)   # 幂等：老库自动补 leads 表
+    n = 0
+    for u, it in signals.items():
+        sc = scored.get(u, {})
+        conn.execute(
+            "INSERT INTO leads (url,platform,sub,keyword,title,author,comments,time_text,intent_rule,"
+            "ai_intent,ai_is_lead,ai_relevance,ai_reason,scanned_at,scored_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+            " ON CONFLICT(url) DO UPDATE SET"
+            " sub=excluded.sub, keyword=excluded.keyword, title=excluded.title,"
+            " author=excluded.author, comments=excluded.comments, time_text=excluded.time_text,"
+            " intent_rule=excluded.intent_rule,"
+            " ai_intent=COALESCE(excluded.ai_intent, leads.ai_intent),"
+            " ai_is_lead=COALESCE(excluded.ai_is_lead, leads.ai_is_lead),"
+            " ai_relevance=COALESCE(excluded.ai_relevance, leads.ai_relevance),"
+            " ai_reason=COALESCE(excluded.ai_reason, leads.ai_reason),"
+            " scanned_at=excluded.scanned_at,"
+            " scored_at=COALESCE(excluded.scored_at, leads.scored_at)",
+            (
+                u, "Reddit", it.get("sub"), it.get("keyword"), it.get("title"),
+                it.get("author"), it.get("comments"), it.get("time_text"),
+                it.get("intent"),
+                sc.get("ai_intent"), 1 if sc.get("ai_is_lead") else (0 if sc else None),
+                sc.get("ai_relevance"), sc.get("ai_reason"),
+                it.get("scanned_at"), sc.get("scored_at") or (sig.get("scored_at") if sc else None),
+            ),
+        )
+        n += 1
+    conn.commit()
+    row = conn.execute("SELECT COUNT(*) c, SUM(CASE WHEN ai_is_lead=1 THEN 1 ELSE 0 END) l FROM leads").fetchone()
+    conn.close()
+    print(json.dumps({"imported": n, "total": row[0], "leads": row[1] or 0}))
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -216,6 +295,8 @@ def main():
         cmd_stats()
     elif cmd == "bulk":
         cmd_bulk(args[1:])
+    elif cmd == "leads":
+        cmd_leads(args[1:])
     elif cmd == "vacuum":
         cmd_vacuum()
     else:

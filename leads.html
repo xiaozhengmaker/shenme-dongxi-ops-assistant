@@ -85,6 +85,13 @@ function esc(s) {
 
 function render() {
   var rows = ALL.filter(function (r) { return !KW || r.keyword === KW; });
+  rows.sort(function (a, b) {
+    var A = AI[a.url], B = AI[b.url];
+    var sa = A ? (A.ai_is_lead ? 2 : 0) : 1, sb = B ? (B.ai_is_lead ? 2 : 0) : 1;
+    if (sa !== sb) return sb - sa;
+    if (A && B) return (B.ai_relevance || 0) - (A.ai_relevance || 0);
+    return 0;
+  });
   if (!rows.length) {
     document.getElementById('tblBox').innerHTML = '<div class="panel empty">还没有信号。跑一次：<code>powershell -File D:\\DeepSeek\\运营\\leads_scan.ps1</code></div>';
     return;
