@@ -29,11 +29,11 @@ function Get-QuerySeeds([string]$type, [string[]]$langs) {
     "trading"      { @("trade", "float", "tradeup") }
     default        { @("cs2", "trade") }
   }
-  $extra = @()
-  if ($langs -match "ru") { $extra += @("кс2 кейсы") }
-  if ($langs -match "pt") { $extra += @("abrir caixa") }
-  if ($langs -match "tr") { $extra += @("kasa açma") }
-  return @($en + $extra | Select-Object -Unique)
+  $local = @()
+  if ($langs -match "ru") { $local += "кс2 кейсы" }
+  if ($langs -match "pt") { $local += "abrir caixa" }
+  if ($langs -match "tr") { $local += "kasa açma" }
+  return [pscustomobject]@{ en = @($en | Select-Object -Unique); local = @($local | Select-Object -Unique) }
 }
 
 function New-GOpsProfilePack($cfg, [string]$text) {
@@ -66,22 +66,35 @@ function New-GOpsProfilePack($cfg, [string]$text) {
   }
 
   $seeds = Get-QuerySeeds $type $langs
+  $promo = '(?i)(my (tiktok|youtube|channel)|subscribe|check out my|promo code|affiliate|discord\.gg|giveaway|referral|join my)'
+  $baseDrop = '(?i)(hotkey|keybind|keyboard|sensitiv|npc|map for|trainer|coach|custom map|fps|ping|lag|cheat|hack|ban|vac)'
 
+
+  # Reddit 只发英文词（实测 ru/pt/tr 在 Reddit 命中恒为 0）
   $reddit = [pscustomobject]@{
-    subs         = @("GlobalOffensiveTrade", "cs2", "GlobalOffensive", "csgotrade")
-    queries      = $seeds
+    subs         = @("GlobalOffensiveTrade", "cs2", "GlobalOffensive")
+    private_subs = @("csgotrade")
+    queries      = @($seeds.en)
+    langs        = @("en")
     require      = '(?i)(cs2|csgo|counter[\s-]?strike|skin|knife|knives|glove|case|unbox|trade|float|price|inventory|market)'
-    drop         = '(?i)(hotkey|keybind|keyboard|sensitiv|npc|map for|trainer|coach|custom map|fps|ping|lag|cheat|hack|ban|vac)'
+    drop         = $baseDrop
+    promo        = $promo
     intent_regex = $intentRegex
     per_query    = 20
     wait_sec     = 7
   }
   $telegram = [pscustomobject]@{
-    queries      = $seeds
+    queries      = @($seeds.en + $seeds.local | Select-Object -Unique)
+    langs        = $langs
+    drop         = $baseDrop
+    promo        = $promo
     intent_regex = $intentRegex
   }
   $facebook = [pscustomobject]@{
-    queries      = $seeds
+    queries      = @($seeds.en + $seeds.local | Select-Object -Unique)
+    langs        = $langs
+    drop         = $baseDrop
+    promo        = $promo
     intent_regex = $intentRegex
   }
 

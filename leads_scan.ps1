@@ -6,6 +6,7 @@ param(
   [int]$WaitSec = 7,
   [switch]$SkipNavigate,
   [switch]$ShowAllIntent,
+  [string]$PromoRegex = "",
   [string]$RequireRegex = '(?i)(cs2|csgo|counter[\s-]?strike|skin|knife|knives|glove|case|unbox|trade|float|price|inventory|market)',
   [string]$DropRegex = '(?i)(hotkey|keybind|key bind|keyboard|config|sensitiv|fps|ping|lag|cheat|hack|ban|vac|girls|malaysia)'
 )
@@ -28,6 +29,7 @@ if ($pack) {
   if ($PerQuery -le 0) { $PerQuery = [int]$pack.per_query }
   if ($pack.require) { $RequireRegex = [string]$pack.require }
   if ($pack.drop) { $DropRegex = [string]$pack.drop }
+  if ($pack.promo) { $PromoRegex = [string]$pack.promo }
   if ($WaitSec -le 0) { $WaitSec = [int]$pack.wait_sec }
 } else {
   Say "WARN 没有业务画像（config.profile），先跑 POST /api/profile/generate"
@@ -55,6 +57,7 @@ $rows = @()
 $queries = 0
 $fails = 0
 $script:Dropped = 0
+$script:Promo = 0
 
 $js = @'
 (() => {
@@ -94,6 +97,10 @@ foreach ($kw in $Keywords) {
       $outer = $raw | ConvertFrom-Json
       $inner = $outer.result.value | ConvertFrom-Json
     } catch { }
+    if ($raw -match "is a private community|is now closed") {
+      Say ("SKIP " + $sub + " / " + $kw + " (private)")
+      continue
+    }
     if (-not $inner -or $inner.bodyLen -lt 500) {
       $fails++
       Say ("FAIL " + $sub + " / " + $kw)
@@ -105,6 +112,7 @@ foreach ($kw in $Keywords) {
       $tt = [string]$r.title
       if ($Dropped -eq $null) { $Dropped = 0 }
       if ($tt -notmatch $RequireRegex -or $tt -match $DropRegex) { $script:Dropped++; continue }
+      if ($PromoRegex -and $tt -match $PromoRegex) { $script:Promo++; continue }
       $intentTag = Get-IntentTag $tt
       if (-not $intentTag -and -not $ShowAllIntent) { $script:Dropped++; continue }
       $rows += [pscustomobject]@{
@@ -150,6 +158,7 @@ $payload = [pscustomobject]@{
   fails      = $fails
   raw        = $rows.Count
   dropped    = $script:Dropped
+  promo_hidden = $script:Promo
   unique     = $list.Count
   items      = $list
 }
