@@ -29,6 +29,12 @@ $state = @{
   failed     = 0
   pending    = $null        # 已派出未回的任务
   started    = $null
+  stale      = 0
+  searches   = 0
+  zeroStreak = 0
+  dryStreak  = 0
+  lastAlert  = ""
+  lastAlertAt = $null
 }
 
 $minMembers = 300
@@ -402,6 +408,36 @@ $cors = @{
   "Access-Control-Allow-Methods" = "GET,POST,OPTIONS"
 }
 
+function Send-Alert([string]$pl, [string]$kind, [string]$msg) {
+  $line = (Get-Date).ToString("HH:mm:ss") + " [" + $kind + "] " + $pl + " " + $msg
+  try {
+    $logDir = Join-Path $PSScriptRoot "logs"
+    if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+    Add-Content -Path (Join-Path $logDir "alerts.log") -Value $line -Encoding UTF8
+  } catch { }
+  $script:state.lastAlert = $line
+  $hook = ""
+  try {
+    $nch = $cfg.notify.channels
+    if ($nch) {
+      if ($nch.ops -and $nch.ops.enabled -and $nch.ops.webhook) { $hook = [string]$nch.ops.webhook }
+      elseif ($nch.main -and $nch.main.enabled -and $nch.main.webhook) { $hook = [string]$nch.main.webhook }
+    }
+  } catch { }
+  if (-not $hook) { try { $hook = [string]$cfg.alerts.webhook } catch { } }
+  if (-not $hook) { try { $hook = [string]$cfg.feishu.webhook } catch { } }
+  try { $pm = $cfg.notify.platforms; if ($pm -and $pl -and $pm.$pl -and -not [bool]$pm.$pl.alerts) { $hook = "" } } catch { }
+  $sent = $false
+  if ($hook) {
+    try {
+      $payload = @{ msg_type = "text"; content = @{ text = ("【社么东西】" + $pl + " 告警`n" + $msg) } } | ConvertTo-Json -Depth 6
+      Invoke-RestMethod -Uri $hook -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($payload)) -ContentType "application/json; charset=utf-8" -TimeoutSec 15 | Out-Null
+      $sent = $true
+    } catch { }
+  }
+  return $sent
+}
+
 function Send-Json($ctx, $code, $obj) {
   $ctx.Response.StatusCode = $code
   foreach ($k in $cors.Keys) { $ctx.Response.Headers[$k] = $cors[$k] }
@@ -680,7 +716,23 @@ while ($listener.IsListening) {
       continue
     }
     if ($path -eq "/api/config" -and $req.HttpMethod -eq "GET") {
-      Send-Json $ctx 200 @{ outputs = $cfg.outputs; schedule = $cfg.schedule; quotas = $cfg.quotas; platforms = $cfg.platforms; platformsEnabled = $cfg.platformsEnabled; behaviors = $cfg.behaviors; reserved = $cfg.reserved; notify = $cfg.notify; taskName = "DSH_SocialOps_Daily"; tasks = (Get-Tasks) }
+      $dbInfo = @{ enabled = $true; ready = $false; rows = 0; groups = 0; sizeText = ""; path = ""; error = "" }
+      try {
+        $dbPath = "data/groupops.db"
+        try { if ($cfg.db -and $cfg.db.path) { $dbPath = [string]$cfg.db.path } } catch { }
+        if (-not [System.IO.Path]::IsPathRooted($dbPath)) { $dbPath = Join-Path $here $dbPath }
+        $dbInfo.path = $dbPath
+        $dbInfo.enabled = ($null -ne $cfg.db -and $cfg.db.enabled -ne $false)
+        $pyExe = Get-DbPython
+        $dbInfo.ready = ($null -ne $pyExe) -and (Test-Path ([string]$pyExe))
+        $dbInfo.python = [string]$pyExe
+        if (Test-Path $dbPath) { $dbInfo.sizeText = ("{0:N1} MB" -f ((Get-Item $dbPath).Length / 1MB)) }
+        if ($dbInfo.ready) {
+          $st = Get-DbStats
+          if ($st) { $dbInfo.rows = [int64]$st.rows; $dbInfo.groups = [int]$st.groups }
+        }
+      } catch { $dbInfo.error = [string]$_.Exception.Message }
+      Send-Json $ctx 200 @{ outputs = $cfg.outputs; schedule = $cfg.schedule; quotas = $cfg.quotas; platforms = $cfg.platforms; platformsEnabled = $cfg.platformsEnabled; behaviors = $cfg.behaviors; reserved = $cfg.reserved; notify = $cfg.notify; db = $dbInfo; taskName = "DSH_SocialOps_Daily"; tasks = (Get-Tasks) }
       continue
     }
 
@@ -690,6 +742,10 @@ while ($listener.IsListening) {
         foreach ($k in @("feishu","sqlite","csv","jsonl")) {
           if ($body.outputs.PSObject.Properties.Name -contains $k) { $cfg.outputs.$k = [bool]$body.outputs.$k }
         }
+      }
+      if ($body.db) {
+        if (-not $cfg.db) { $cfg | Add-Member -NotePropertyName db -NotePropertyValue ([pscustomobject]@{ enabled = $true; path = "data/groupops.db"; python = ""; auto_import = $true }) -Force }
+        if ($body.db.PSObject.Properties.Name -contains "enabled") { $cfg.db.enabled = [bool]$body.db.enabled }
       }
       if ($body.schedule) {
         if ($body.schedule.PSObject.Properties.Name -contains "enabled") { $cfg.schedule.enabled = [bool]$body.schedule.enabled }
@@ -1124,8 +1180,9 @@ while ($listener.IsListening) {
         $c = $state.queue.Dequeue()
         $id = Next-TaskId
         $state.pending = @{ kind = "join"; id = $id }
+        $rd = 0; try { $rd = [int]$cfg.filters.recent_activity_days } catch { }
         Send-Json $ctx 200 @{ action = "join"; platform = $Platform; id = $id; u = $c.u; chatId = $c.id;
-                              title = $c.title; n = $c.n; self = $state.self; q = $c.q }
+                              title = $c.title; n = $c.n; self = $state.self; q = $c.q; recentDays = $rd }
         continue
       }
       Send-Json $ctx 204 $null
@@ -1166,8 +1223,35 @@ while ($listener.IsListening) {
           $state.candidates[$id] = @{ id = $id; u = [string]$c.u; title = [string]$c.title; n = [int]$c.n; q = $q }
           $cnt++
         }
-        Write-Host ("[hub] search '$q' 新增候选 $cnt")
+        $rawN = @($r.value).Count
+        Write-Host ("[hub] search '$q' raw=$rawN new=$cnt min=$($state.minNow) seen=$($seen.Count)")
+        if ($rawN -gt 0 -and $cnt -eq 0) {
+          $s0 = @($r.value)[0]
+          Write-Host ("[hub] sample raw: n=" + $s0.n + " t=" + $s0.title + " bc=" + $s0.bc)
+        }
         Add-Event ("搜索 " + $q + " → 新增 " + $cnt + " 个候选")
+        $state.searches++
+        # 链路异常 = 扩展一条都没返回；关键词枯竭 = 有返回但全是已收录/被过滤
+        if ($rawN -eq 0) { $state.zeroStreak++ } else { $state.zeroStreak = 0 }
+        if ($cnt -eq 0 -and $rawN -gt 0) { $state.dryStreak++ } else { $state.dryStreak = 0 }
+        if ($state.dryStreak -ge 12 -and $state.phase -eq "search") {
+          $state.phase = "join"
+          Add-Event ("关键词已挖尽（连续 " + $state.dryStreak + " 个关键词无新增），转入加入阶段")
+        }
+        $limitZero = 8; try { if ($cfg.health -and $cfg.health.zero_streak) { $limitZero = [int]$cfg.health.zero_streak } } catch { }
+        if ($state.zeroStreak -ge $limitZero) {
+          $state.phase = "done"
+          $state.running = $false
+          $msg = "采集链路异常：" + $Platform + " 连续 " + $state.zeroStreak + " 个关键词扩展返回 0 条结果（最后：" + $q + "），已中止本轮"
+          Write-Host ("[hub] " + $msg)
+          Add-Event $msg
+          $cd = 30; try { if ($cfg.health -and $cfg.health.alert_cooldown_min) { $cd = [int]$cfg.health.alert_cooldown_min } } catch { }
+          $canAlert = $true
+          if ($state.lastAlertAt -and ((Get-Date) - [datetime]$state.lastAlertAt).TotalMinutes -lt $cd) { $canAlert = $false }
+          if ($canAlert) {
+            try { Send-Alert $Platform "collector_stalled" $msg | Out-Null; $state.lastAlertAt = Get-Date } catch { }
+          }
+        }
       }
       elseif ($kind -eq "join") {
         $v = [string]$r.value
@@ -1176,6 +1260,10 @@ while ($listener.IsListening) {
           if ($tgt) { Write-JoinRecord $tgt $v | Out-Null }
           $state.joined++
           $state.fails = 0
+        } elseif ($v -eq "stale") {
+          $state.skipped++
+          $state.fails = 0
+          $state.stale++
         } elseif ($v -eq "request_sent" -or $v -eq "not_found" -or $v -eq "approval") {
           if ($v -eq "request_sent" -and $tgt) { Write-JoinRecord $tgt $v | Out-Null }
           $state.skipped++

@@ -94,6 +94,23 @@ function pageJoin(p) {
     if (!chat) { window.__dshRes = JSON.stringify({ ok: true, v: "not_found" }); return; }
     // 需审批的群一律不申请（Telegram 会在 chat.join_request 上标记）
     if (chat.join_request) { window.__dshRes = JSON.stringify({ ok: true, v: "approval" }); return; }
+    // 近 N 天无聊天记录的群视为死群，直接跳过（用户口径：小群粘性更高，但必须活着）
+    if (p.recentDays > 0) {
+      try {
+        const peer = chat._ === "channel"
+          ? { _: "inputPeerChannel", channel_id: chat.id, access_hash: chat.access_hash }
+          : { _: "inputPeerChat", chat_id: chat.id };
+        const h = await am.invokeApi("messages.getHistory", {
+          peer: peer, offset_id: 0, offset_date: 0, add_offset: 0, limit: 1, max_id: 0, min_id: 0, hash: 0
+        });
+        const last = (h.messages && h.messages[0] && h.messages[0].date) || 0;
+        const cutoff = Math.floor(Date.now() / 1000) - p.recentDays * 86400;
+        if (!last || last < cutoff) {
+          window.__dshRes = JSON.stringify({ ok: true, v: "stale", last: last });
+          return;
+        }
+      } catch (e) { }
+    }
     try {
       if (chat._ === "channel") {
         await am.invokeApi("channels.joinChannel", {
