@@ -1519,6 +1519,59 @@ while ($listener.IsListening) {
       continue
     }
 
+    if ($path -eq "/api/entities" -and $req.HttpMethod -eq "GET") {
+      $q = [System.Web.HttpUtility]::ParseQueryString($req.Url.Query)
+      $type = $(if ($q['type']) { [string]$q['type'] } else { 'group' })
+      $lim = [int]$(if ($q['limit']) { $q['limit'] } else { '20' })
+      $out = Invoke-DbTool -Args @('entities', $type, '--limit', "$lim")
+      Send-Json $ctx 200 ($out | ConvertFrom-Json)
+      continue
+    }
+
+    if ($path -eq "/api/recommendations" -and $req.HttpMethod -eq "GET") {
+      $q = [System.Web.HttpUtility]::ParseQueryString($req.Url.Query)
+      $st = $(if ($q['status']) { [string]$q['status'] } else { 'pending' })
+      $lim = [int]$(if ($q['limit']) { $q['limit'] } else { '50' })
+      $out = Invoke-DbTool -Args @('recommend-list', '--status', $st, '--limit', "$lim")
+      Send-Json $ctx 200 ($out | ConvertFrom-Json)
+      continue
+    }
+
+    if ($path -eq "/api/recommendations/decide" -and $req.HttpMethod -eq "POST") {
+      $body = $null
+      try { $body = (New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json } catch { }
+      if (-not $body -or -not $body.dedupe_key) { Send-Json $ctx 400 @{ ok = $false; error = 'dedupe_key_required' }; continue }
+      $act = [string]$body.action
+      $map = @{ accept = 'accepted'; ignore = 'ignored'; expire = 'expired' }
+      if (-not $map.ContainsKey($act)) { Send-Json $ctx 400 @{ ok = $false; error = 'action_invalid' }; continue }
+      $tmp = Join-Path $here ("data\_decide_" + [guid]::NewGuid().ToString('N') + ".json")
+      $payload = @{ dedupe_key = [string]$body.dedupe_key; status = [string]$map[$act]; reason = [string]$body.note } | ConvertTo-Json -Depth 4 -Compress
+      [System.IO.File]::WriteAllText($tmp, $payload, (New-Object System.Text.UTF8Encoding($false)))
+      try { $out = Invoke-DbTool -Args @('decide', $tmp) } finally { Remove-Item $tmp -ErrorAction SilentlyContinue }
+      Send-Json $ctx 200 ($out | ConvertFrom-Json)
+      continue
+    }
+
+    if ($path -eq "/api/score/run" -and $req.HttpMethod -eq "POST") {
+      $sc = Invoke-DbTool -Args @('score')
+      $rc = Invoke-DbTool -Args @('recommend', '--limit', '80')
+      Send-Json $ctx 200 @{ ok = $true; score = ($sc | ConvertFrom-Json); recommend = ($rc | ConvertFrom-Json) }
+      continue
+    }
+
+    if ($path -eq "/entities" -and $req.HttpMethod -eq "GET") {
+      $ef = Join-Path $here "entities.html"
+      if (Test-Path $ef) {
+        $bytes = [System.IO.File]::ReadAllBytes($ef)
+        $ctx.Response.StatusCode = 200
+        $ctx.Response.ContentType = "text/html; charset=utf-8"
+        $ctx.Response.ContentLength64 = $bytes.Length
+        $ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+        $ctx.Response.OutputStream.Close()
+      } else { Send-Json $ctx 404 @{ error = "entities.html missing" } }
+      continue
+    }
+
     Send-Json $ctx 404 @{ ok = $false }
   } catch {
     Write-Warning ("[hub] " + $_.Exception.Message)

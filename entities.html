@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>实体与机会 · 社么东西</title>
+<style>
+  :root { --line:#e6eaef; --ink:#1f2429; --muted:#6b7480; --blue:#2b6cf6; --green:#12a150; --red:#d64545; --amber:#c98a00; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#f6f8fb; color:var(--ink); font:14px/1.55 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:22px 18px 60px; }
+  header { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  h1 { font-size:20px; margin:0; }
+  .sub { color:var(--muted); font-size:13px; }
+  .spacer { flex:1; }
+  a.btn, button.btn { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:8px; padding:6px 12px; cursor:pointer; font-size:13px; text-decoration:none; }
+  a.btn:hover, button.btn:hover { border-color:#c9d3e0; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+  .card h2 { font-size:15px; margin:0 0 4px; }
+  .card .hint { color:var(--muted); font-size:12px; margin-bottom:10px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .tier { display:inline-block; padding:1px 7px; border-radius:999px; font-size:12px; border:1px solid; }
+  .tier.A { color:var(--green); border-color:#bfe3cd; background:#f1fbf5; }
+  .tier.B { color:var(--blue); border-color:#c9d8ff; background:#f3f7ff; }
+  .tier.C { color:var(--amber); border-color:#f0dfae; background:#fffaef; }
+  .tier.D { color:var(--muted); border-color:var(--line); background:#fafbfc; }
+  .miss { color:var(--red); font-size:12px; }
+  .reasons { color:var(--muted); font-size:12px; }
+  .acts { display:flex; gap:6px; }
+  .ok { color:var(--green); }
+  .empty { color:var(--muted); padding:18px 4px; }
+  .kpi { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .kpi .box { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 14px; min-width:120px; }
+  .kpi .box b { display:block; font-size:20px; }
+  .kpi .box span { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h2 style="font-size:18px;margin:0">实体与机会</h2>
+    <span class="sub">离线评分 · 不改外部状态</span>
+    <span class="spacer"></span>
+    <a class="btn" href="/">看板</a>
+    <a class="btn" href="/leads">线索池</a>
+    <button class="btn" id="btnRescore">重算评分</button>
+  </header>
+
+  <div class="kpi" id="kpi"></div>
+
+  <div class="card">
+    <h2>待处理建议</h2>
+    <div class="hint">接受只改状态，不执行外部动作；去重键含动作+平台+实体+版本+周期。</div>
+    <div id="recBox"><div class="empty">加载中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>话题价值（Reddit 信号）</h2>
+    <div class="hint">需求密度权重最高：晒图多但没人问价的话题，分不会高。</div>
+    <div id="topicBox"><div class="empty">加载中…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>群价值（Top 12）</h2>
+    <div class="hint">规模大但无成员样本的群，会被标成「未观察」而不是满分。</div>
+    <div id="groupBox"><div class="empty">加载中…</div></div>
+  </div>
+</div>
+
+<script>
+var HUB = 'http://127.0.0.1:8787';
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+function f1(v) { return (v == null) ? '—' : Number(v).toFixed(1); }
+function f2(v) { return (v == null) ? '—' : Number(v).toFixed(2); }
+
+function renderKpi(counts, total) {
+  var pend = (counts && counts.pending) || 0;
+  var acc = (counts && counts.accepted) || 0;
+  var ign = (counts && counts.ignored) || 0;
+  document.getElementById('kpi').innerHTML =
+    '<div class="box"><b>' + pend + '</b><span>待处理</span></div>' +
+    '<div class="box"><b>' + acc + '</b><span>已接受</span></div>' +
+    '<div class="box"><b>' + ign + '</b><span>已忽略</span></div>' +
+    '<div class="box"><b>' + (total || 0) + '</b><span>建议总数</span></div>';
+}
+
+function renderRecs(d) {
+  var items = (d && d.items) || [];
+  renderKpi(d && d.counts, d && d.total);
+  if (!items.length) {
+    document.getElementById('recBox').innerHTML = '<div class="empty">暂无待处理建议。先跑一次评分。</div>';
+    return;
+  }
+  var rows = items.map(function (r) {
+    var acts = r.status === 'pending'
+      ? '<div class="acts"><button class="btn" data-k="' + esc(r.dedupe_key) + '" data-a="accept">接受</button>' +
+        '<button class="btn" data-k="' + esc(r.dedupe_key) + '" data-a="ignore">忽略</button></div>'
+      : '<span class="ok">' + esc(r.status) + '</span>';
+    return '<tr><td>' + esc(r.action_type) + '</td><td>' + esc(r.platform) + '</td>' +
+      '<td>' + esc(r.entity_id) + '</td><td class="num">' + f1(r.score) + '</td>' +
+      '<td class="num">' + f2(r.confidence) + '</td>' +
+      '<td class="reasons">' + esc((r.reasons || []).join(', ')) + '</td><td>' + acts + '</td></tr>';
+  }).join('');
+  document.getElementById('recBox').innerHTML =
+    '<table><thead><tr><th>动作</th><th>平台</th><th>对象</th><th>价值分</th><th>置信度</th><th>依据</th><th>操作</th></tr></thead><tbody>' +
+    rows + '</tbody></table>';
+}
+
+function dimsCell(dims) {
+  var miss = [];
+  ['volume', 'demand', 'freshness', 'diversity', 'specificity', 'activity', 'demand_density'].forEach(function (k) {
+    if (dims && Object.prototype.hasOwnProperty.call(dims, k) && dims[k] === null) miss.push(k);
+  });
+  return miss.length ? '<span class="miss">未观察: ' + esc(miss.join('/')) + '</span>' : '<span class="reasons">维度齐</span>';
+}
+
+function renderEntities(id, d, kind) {
+  var items = (d && d.items) || [];
+  if (!items.length) { document.getElementById(id).innerHTML = '<div class="empty">暂无数据</div>'; return; }
+  var rows = items.map(function (r) {
+    var dims = (kind === 'group')
+      ? ('需求 ' + f2(r.dims && r.dims.demand_density) + ' · 活跃 ' + f2(r.dims && r.dims.activity))
+      : ('需求 ' + f2(r.dims && r.dims.demand) + ' · 新鲜 ' + f2(r.dims && r.dims.freshness) + ' · 多样 ' + f2(r.dims && r.dims.diversity));
+    return '<tr><td><b>' + esc(r.entity_id) + '</b><div class="reasons">' + esc(r.platform) +
+      ' · ' + esc((r.reasons || []).join(', ')) + '</div></td>' +
+      '<td class="num">' + f1(r.score) + '</td>' +
+      '<td><span class="tier ' + esc(r.tier) + '">' + esc(r.tier) + '</span></td>' +
+      '<td class="num">' + f2(r.confidence) + '</td>' +
+      '<td class="num">' + f2(r.coverage) + '</td>' +
+      '<td class="reasons">' + dims + '</td><td>' + dimsCell(r.dims) + '</td></tr>';
+  }).join('');
+  document.getElementById(id).innerHTML =
+    '<table><thead><tr><th>对象</th><th>价值分</th><th>分层</th><th>置信度</th><th>覆盖率</th><th>维度</th><th>缺失</th></tr></thead><tbody>' +
+    rows + '</tbody></table>';
+}
+
+function load() {
+  fetch(HUB + '/api/recommendations?status=pending&limit=30').then(function (r) { return r.json(); })
+    .then(renderRecs).catch(function () { document.getElementById('recBox').innerHTML = '<div class="empty">读不到后台</div>'; });
+  fetch(HUB + '/api/entities?type=topic&limit=12').then(function (r) { return r.json(); })
+    .then(function (d) { renderEntities('topicBox', d, 'topic'); });
+  fetch(HUB + '/api/entities?type=group&limit=12').then(function (r) { return r.json(); })
+    .then(function (d) { renderEntities('groupBox', d, 'group'); });
+}
+
+document.addEventListener('click', function (e) {
+  var b = e.target.closest && e.target.closest('button[data-k]');
+  if (!b) return;
+  var key = b.getAttribute('data-k'), act = b.getAttribute('data-a');
+  b.disabled = true;
+  fetch(HUB + '/api/recommendations/decide', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dedupe_key: key, action: act })
+  }).then(function () { load(); }).catch(function () { b.disabled = false; });
+});
+
+document.getElementById('btnRescore').addEventListener('click', function () {
+  var btn = this; btn.disabled = true; btn.textContent = '重算中…';
+  fetch(HUB + '/api/score/run', { method: 'POST' }).then(function (r) { return r.json(); })
+    .then(function () { btn.disabled = false; btn.textContent = '重算评分'; load(); })
+    .catch(function () { btn.disabled = false; btn.textContent = '重算评分'; });
+});
+
+load();
+</script>
+</body>
+</html>
