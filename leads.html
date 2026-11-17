@@ -29,6 +29,7 @@
   .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
   .tag.store { background: #fff2e5; color: #b45309; }
   .tag.spam { background: #fdeaea; color: #b91c1c; }
+  .src { color: #8a95a3; font-size: 12px; margin-left: 8px; }
   .meta { color: #8a95a3; font-size: 12px; }
   .empty { padding: 40px; text-align: center; color: #8a95a3; }
 </style>
@@ -53,6 +54,7 @@
 
   <div class="panel">
     <div class="chips" id="kwChips"></div>
+    <div class="src" id="srcNote"></div>
   </div>
 
   <div id="tblBox"></div>
@@ -75,13 +77,14 @@ function render() {
     document.getElementById('tblBox').innerHTML = '<div class="panel empty">还没有信号。跑一次：<code>powershell -File D:\\DeepSeek\\运营\\leads_scan.ps1</code></div>';
     return;
   }
-  var h = '<table><thead><tr><th style="width:34%">帖子</th><th>板块</th><th>命中词</th><th>作者</th><th>互动</th></tr></thead><tbody>';
+  var h = '<table><thead><tr><th style="width:30%">帖子</th><th>意图</th><th>板块</th><th>命中词</th><th>作者</th><th>互动</th></tr></thead><tbody>';
   rows.forEach(function (r) {
     var tags = '';
     if (r.store) tags += '<span class="tag store">store</span>';
     if (r.spam) tags += '<span class="tag spam">刷屏</span>';
     h += '<tr>'
       + '<td class="t"><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">' + esc(r.title) + '</a>' + tags + '</td>'
+      + '<td class="meta">' + esc(r.intent || '—') + '</td>'
       + '<td class="meta">' + esc(r.sub) + '</td>'
       + '<td class="meta">' + esc(r.keyword) + '</td>'
       + '<td class="meta">' + esc(r.author) + '</td>'
@@ -119,6 +122,7 @@ fetch(HUB + '/api/leads').then(function (r) { return r.json(); }).then(function 
   if (dk && d.dropped != null) { dk.textContent = '去重前（已过滤 ' + d.dropped + ' 条噪声）'; }
   document.getElementById('sQ').textContent = d.queries != null ? d.queries : '—';
   document.getElementById('sAt').textContent = d.scanned_at || '—';
+  if (d.generator) { document.getElementById('srcNote').textContent = '检索包：' + d.generator + ' · 意图门 ' + (d.intent_ids || '') ; }
   paintChips();
   render();
 }).catch(function (e) {

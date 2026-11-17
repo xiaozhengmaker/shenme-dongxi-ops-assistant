@@ -1,10 +1,11 @@
 ﻿# leads_scan.ps1 -- P0: 从 Reddit 旧版页面抓「信号」（不接 AI）
 param(
-  [string[]]$Keywords = @("case opening", "keys", "unboxing"),
-  [string[]]$Subs = @("GlobalOffensiveTrade", "cs2", "GlobalOffensive", "csgotrade"),
-  [int]$PerQuery = 25,
+  [string[]]$Keywords = @(),
+  [string[]]$Subs = @(),
+  [int]$PerQuery = 0,
   [int]$WaitSec = 7,
   [switch]$SkipNavigate,
+  [switch]$ShowAllIntent,
   [string]$RequireRegex = '(?i)(cs2|csgo|counter[\s-]?strike|skin|knife|knives|glove|case|unbox|trade|float|price|inventory|market)',
   [string]$DropRegex = '(?i)(hotkey|keybind|key bind|keyboard|config|sensitiv|fps|ping|lag|cheat|hack|ban|vac|girls|malaysia)'
 )
@@ -15,7 +16,40 @@ Set-LogFile (Join-Path $baseDir "logs\leads_scan.log")
 $cdp = Join-Path $baseDir "cdp_call.ps1"
 $outFile = Join-Path $baseDir "data\leads_signals.json"
 
+# --- 平台检索包：一律来自业务画像，脚本内不写死 ---
+. (Join-Path $baseDir "lib\profile.ps1")
+$cfg = Get-Content (Join-Path $baseDir "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+$pack = $null
+$prof = Get-GOpsProfile $cfg
+if ($prof -and $prof.platforms -and $prof.platforms.Reddit) { $pack = $prof.platforms.Reddit }
+if ($pack) {
+  if (-not $Keywords -or $Keywords.Count -eq 0) { $Keywords = @($pack.queries) }
+  if (-not $Subs -or $Subs.Count -eq 0) { $Subs = @($pack.subs) }
+  if ($PerQuery -le 0) { $PerQuery = [int]$pack.per_query }
+  if ($pack.require) { $RequireRegex = [string]$pack.require }
+  if ($pack.drop) { $DropRegex = [string]$pack.drop }
+  if ($WaitSec -le 0) { $WaitSec = [int]$pack.wait_sec }
+} else {
+  Say "WARN 没有业务画像（config.profile），先跑 POST /api/profile/generate"
+}
+
 function Say([string]$m) { Write-Log ("[leads] " + $m) }
+
+$intentMap = @()
+if ($pack -and $pack.intent_regex) {
+  foreach ($pp in $pack.intent_regex.PSObject.Properties) {
+    $intentMap += [pscustomobject]@{ id = $pp.Name; rx = [string]$pp.Value }
+  }
+}
+
+function Get-IntentTag([string]$title) {
+  $hit = @()
+  foreach ($im in $intentMap) {
+    if ($title -match $im.rx) { $hit += $im.id }
+  }
+  if ((@($intentMap | ForEach-Object { $_.id }) -contains "team_recruit") -eq $false) { }
+  return ($hit -join ",")
+}
 
 $rows = @()
 $queries = 0
@@ -71,6 +105,8 @@ foreach ($kw in $Keywords) {
       $tt = [string]$r.title
       if ($Dropped -eq $null) { $Dropped = 0 }
       if ($tt -notmatch $RequireRegex -or $tt -match $DropRegex) { $script:Dropped++; continue }
+      $intentTag = Get-IntentTag $tt
+      if (-not $intentTag -and -not $ShowAllIntent) { $script:Dropped++; continue }
       $rows += [pscustomobject]@{
         platform  = "Reddit"
         sub       = [string]$r.sub
@@ -80,6 +116,7 @@ foreach ($kw in $Keywords) {
         author    = [string]$r.author
         time_text = [string]$r.timeText
         comments  = [string]$r.comments
+        intent    = $intentTag
         scanned_at = (Get-Date).ToString("s")
       }
       $n++

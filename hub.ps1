@@ -8,6 +8,7 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $here "lib\feishu.ps1")
 . (Join-Path $here "lib\db.ps1")
 . (Join-Path $here "lib\stop.ps1")
+. (Join-Path $here "lib\profile.ps1")
 
 $cfgPath = Join-Path $here "config.json"
 $cfg = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -1078,6 +1079,26 @@ while ($listener.IsListening) {
         $ctx.Response.OutputStream.Write($hb3, 0, $hb3.Length)
         $ctx.Response.Close()
       } else { Send-Json $ctx 404 @{ error = "leads.html missing" } }
+      continue
+    }
+
+    if ($path -eq "/api/profile" -and $req.HttpMethod -eq "GET") {
+      $prof = Get-GOpsProfile $script:Cfg
+      Send-Json $ctx 200 @{ ok = $true; profile = $prof }
+      continue
+    }
+
+    if ($path -eq "/api/profile/generate" -and $req.HttpMethod -eq "POST") {
+      $bodyP = $null
+      try { $bodyP = ((New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json) } catch { }
+      $txtP = ""
+      if ($bodyP -and $bodyP.text) { $txtP = [string]$bodyP.text }
+      if (-not $txtP.Trim()) { Send-Json $ctx 400 @{ error = "text_required" }; continue }
+      $profNew = New-GOpsProfilePack $script:Cfg $txtP
+      Save-GOpsProfile (Join-Path $PSScriptRoot "config.json") $script:Cfg $profNew | Out-Null
+      $script:Cfg = Get-Content (Join-Path $PSScriptRoot "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+      Add-Event ("[profile] 已生成检索包 " + $profNew.business_type + " / " + (@($profNew.platforms.Reddit.queries).Count) + " 个查询词")
+      Send-Json $ctx 200 @{ ok = $true; profile = $profNew }
       continue
     }
 
