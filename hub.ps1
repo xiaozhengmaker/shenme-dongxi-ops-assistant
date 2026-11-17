@@ -1182,7 +1182,8 @@ while ($listener.IsListening) {
         $state.pending = @{ kind = "join"; id = $id }
         $rd = 0; try { $rd = [int]$cfg.filters.recent_activity_days } catch { }
         Send-Json $ctx 200 @{ action = "join"; platform = $Platform; id = $id; u = $c.u; chatId = $c.id;
-                              title = $c.title; n = $c.n; self = $state.self; q = $c.q; recentDays = $rd }
+                              title = $c.title; n = $c.n; self = $state.self; q = $c.q; recentDays = $rd;
+                              hash = [string]$c.h; kind = [string]$c.k }
         continue
       }
       Send-Json $ctx 204 $null
@@ -1220,7 +1221,7 @@ while ($listener.IsListening) {
           if ($state.candidates.ContainsKey($id)) { continue }
           $uk = ("@" + ([string]$c.u)).ToLower()
           if ($c.u -and $state.skipSet -and $state.skipSet.ContainsKey($uk)) { continue }
-          $state.candidates[$id] = @{ id = $id; u = [string]$c.u; title = [string]$c.title; n = [int]$c.n; q = $q }
+          $state.candidates[$id] = @{ id = $id; u = [string]$c.u; title = [string]$c.title; n = [int]$c.n; q = $q; h = [string]$c.h; k = [string]$c.k }
           $cnt++
         }
         $rawN = @($r.value).Count
@@ -1235,8 +1236,9 @@ while ($listener.IsListening) {
         if ($rawN -eq 0) { $state.zeroStreak++ } else { $state.zeroStreak = 0 }
         if ($cnt -eq 0 -and $rawN -gt 0) { $state.dryStreak++ } else { $state.dryStreak = 0 }
         if ($state.dryStreak -ge 12 -and $state.phase -eq "search") {
-          $state.phase = "join"
-          Add-Event ("关键词已挖尽（连续 " + $state.dryStreak + " 个关键词无新增），转入加入阶段")
+          $state.queries.Clear()
+          Build-JoinQueue | Write-Host
+          Add-Event ("关键词已挖尽（连续 " + $state.dryStreak + " 个无新增），候选 " + $state.candidates.Count + " / 待加入 " + $state.queue.Count)
         }
         $limitZero = 8; try { if ($cfg.health -and $cfg.health.zero_streak) { $limitZero = [int]$cfg.health.zero_streak } } catch { }
         if ($state.zeroStreak -ge $limitZero) {

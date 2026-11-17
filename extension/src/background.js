@@ -76,7 +76,8 @@ function pageSearch(p) {
     const r = await am.invokeApi("contacts.search", { q: p.q, limit: p.limit || 20 });
     const list = (r.chats || []).map(c => ({
       id: String(c.id), title: c.title || "", u: c.username || "",
-      n: c.participants_count || 0, mg: !!c.megagroup, bc: !!c.broadcast
+      n: c.participants_count || 0, mg: !!c.megagroup, bc: !!c.broadcast,
+      h: String(c.access_hash || ""), k: (c._ === "channel" ? "channel" : "chat")
     }));
     window.__dshRes = JSON.stringify({ ok: true, v: list });
   })().catch(e => { window.__dshRes = JSON.stringify({ ok: false, e: String(e && e.message || e) }); });
@@ -87,7 +88,9 @@ function pageJoin(p) {
   (async () => {
     const am = rootScope.managers.apiManager;
     let chat = null;
-    if (p.u) {
+    if (p.chatId && p.hash) {
+      chat = { _: (p.kind === "chat" ? "chat" : "channel"), id: p.chatId, access_hash: p.hash, join_request: false };
+    } else if (p.u) {
       const r = await am.invokeApi("contacts.resolveUsername", { username: p.u });
       chat = (r.chats && r.chats[0]) || null;
     }
