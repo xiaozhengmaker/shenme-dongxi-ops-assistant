@@ -64,6 +64,18 @@
 var HUB = 'http://127.0.0.1:8787';
 var ALL = [];
 var KW = '';
+var AI = {};
+
+function loadAi() {
+  fetch(HUB + '/api/leads/scored').then(function (r) { return r.json(); }).then(function (d) {
+    (d.items || []).forEach(function (x) { AI[x.url] = x; });
+    if (d.total) {
+      var lead = (d.items || []).filter(function (x) { return x.ai_is_lead; }).length;
+      document.getElementById('sAt').textContent = d.scored_at + ' · AI ' + lead + '/' + d.total + ' 线索';
+    }
+    render();
+  }).catch(function () { });
+}
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -77,13 +89,14 @@ function render() {
     document.getElementById('tblBox').innerHTML = '<div class="panel empty">还没有信号。跑一次：<code>powershell -File D:\\DeepSeek\\运营\\leads_scan.ps1</code></div>';
     return;
   }
-  var h = '<table><thead><tr><th style="width:30%">帖子</th><th>意图</th><th>板块</th><th>命中词</th><th>作者</th><th>互动</th></tr></thead><tbody>';
+  var h = '<table><thead><tr><th style="width:28%">帖子</th><th>AI</th><th>意图</th><th>板块</th><th>命中词</th><th>作者</th><th>互动</th></tr></thead><tbody>';
   rows.forEach(function (r) {
     var tags = '';
     if (r.store) tags += '<span class="tag store">store</span>';
     if (r.spam) tags += '<span class="tag spam">刷屏</span>';
     h += '<tr>'
       + '<td class="t"><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">' + esc(r.title) + '</a>' + tags + '</td>'
+      + '<td class="meta">' + (AI[r.url] ? (AI[r.url].ai_is_lead ? '<b style="color:#0f766e">✓ ' + AI[r.url].ai_relevance + '</b>' : '<span style="color:#b91c1c">✗ ' + esc(AI[r.url].ai_intent) + '</span>') : '—') + '</td>'
       + '<td class="meta">' + esc(r.intent || '—') + '</td>'
       + '<td class="meta">' + esc(r.sub) + '</td>'
       + '<td class="meta">' + esc(r.keyword) + '</td>'
@@ -125,6 +138,7 @@ fetch(HUB + '/api/leads').then(function (r) { return r.json(); }).then(function 
   if (d.generator) { document.getElementById('srcNote').textContent = '检索包：' + d.generator + ' · 意图门 ' + (d.intent_ids || '') ; }
   paintChips();
   render();
+  loadAi();
 }).catch(function (e) {
   document.getElementById('tblBox').innerHTML = '<div class="panel empty">读不到本地后台：' + esc(e.message) + '</div>';
 });

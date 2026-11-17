@@ -47,7 +47,11 @@ function Invoke-AiChat($aiCfg, [string]$system, [string]$user, [switch]$JsonMode
   $lastErr = ""
   for ($try = 1; $try -le 3; $try++) {
     try {
-      $r = Invoke-RestMethod -Uri $url -Method Post -Body $bytes -ContentType "application/json; charset=utf-8" -Headers $headers -TimeoutSec $aiCfg.timeout
+      # 关键：PS 5.1 的 Invoke-RestMethod 不按 charset 解码，中文会变 mojibake -> 自己取字节按 UTF-8 解
+      $resp = Invoke-WebRequest -Uri $url -Method Post -Body $bytes -ContentType "application/json; charset=utf-8" -Headers $headers -TimeoutSec $aiCfg.timeout -UseBasicParsing
+      $rawBytes = $resp.RawContentStream.ToArray()
+      $rawText = [System.Text.Encoding]::UTF8.GetString($rawBytes)
+      $r = $rawText | ConvertFrom-Json
       $txt = [string]$r.choices[0].message.content
       $usage = $r.usage
       return [pscustomobject]@{ ok = $true; text = $txt; usage = $usage }

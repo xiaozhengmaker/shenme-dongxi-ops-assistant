@@ -1158,6 +1158,15 @@ while ($listener.IsListening) {
       continue
     }
 
+    if ($path -eq "/api/leads/scored" -and $req.HttpMethod -eq "GET") {
+      $sj = Join-Path $PSScriptRoot "data\leads_scored.json"
+      if (Test-Path $sj) {
+        $sraw = [System.IO.File]::ReadAllText($sj, [System.Text.Encoding]::UTF8)
+        Send-Json $ctx 200 ($sraw | ConvertFrom-Json)
+      } else { Send-Json $ctx 200 @{ total = 0; items = @() } }
+      continue
+    }
+
     if ($path -eq "/api/water" -and $req.HttpMethod -eq "GET") {
       $sum = Get-Summary
       $counts = @{}
