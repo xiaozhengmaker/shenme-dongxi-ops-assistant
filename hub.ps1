@@ -248,6 +248,10 @@ function Build-JoinQueue {
     $uk2 = ("@" + ([string]$_.u).TrimStart("@")).ToLower()
     -not ($_.u -and $state.skipSet -and $state.skipSet.ContainsKey($uk2))
   })
+  # 既无 username 又无 access_hash 的候选无法可靠加入（老候选池 schema），直接剔除
+  $before = $list.Count
+  $list = @($list | Where-Object { ([string]$_.u).Trim() -ne "" -or ([string]$_.h).Trim() -ne "" })
+  if ($before -ne $list.Count) { Write-Host ("[hub] 剔除无法加入的候选 " + ($before - $list.Count) + " 个（无 u/h）") }
   $take = [Math]::Min($need, $list.Count)
   $i = 0
   foreach ($c in $list) {
@@ -1222,6 +1226,7 @@ while ($listener.IsListening) {
           $uk = ("@" + ([string]$c.u)).ToLower()
           if ($c.u -and $state.skipSet -and $state.skipSet.ContainsKey($uk)) { continue }
           $state.candidates[$id] = @{ id = $id; u = [string]$c.u; title = [string]$c.title; n = [int]$c.n; q = $q; h = [string]$c.h; k = [string]$c.k }
+          Write-Host ("[hub] cand id=" + $id + " u=" + $c.u + " h=" + (("" + $c.h).Length) + " k=" + $c.k)
           $cnt++
         }
         $rawN = @($r.value).Count
