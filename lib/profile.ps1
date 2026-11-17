@@ -25,7 +25,7 @@ function Get-IntentCatalog([string]$type) {
 
 function Get-QuerySeeds([string]$type, [string[]]$langs) {
   $en = switch ($type) {
-    "case_opening" { @("case opening", "unboxed", "keys") }
+    "case_opening" { @("case opening", "unboxed", "keys", "trade", "float") }
     "trading"      { @("trade", "float", "tradeup") }
     default        { @("cs2", "trade") }
   }
@@ -72,7 +72,7 @@ function New-GOpsProfilePack($cfg, [string]$text) {
 
   # Reddit 只发英文词（实测 ru/pt/tr 在 Reddit 命中恒为 0）
   $reddit = [pscustomobject]@{
-    subs         = @("GlobalOffensiveTrade", "cs2", "GlobalOffensive")
+    subs         = @("GlobalOffensiveTrade", "cs2", "GlobalOffensive", "csgomarketforum", "ohnePixel", "cs2gamblingcommunity")
     private_subs = @("csgotrade")
     queries      = @($seeds.en)
     langs        = @("en")
@@ -80,7 +80,8 @@ function New-GOpsProfilePack($cfg, [string]$text) {
     drop         = $baseDrop
     promo        = $promo
     intent_regex = $intentRegex
-    per_query    = 20
+    per_query    = 100
+    window       = "year"
     wait_sec     = 7
   }
   $telegram = [pscustomobject]@{

@@ -80,10 +80,12 @@ $js = @'
 })()
 '@
 
+$multi = (@($Subs) | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join "+"
 foreach ($kw in $Keywords) {
-  foreach ($sub in $Subs) {
+  foreach ($sub in @($multi)) {
     $q = [uri]::EscapeDataString('"' + $kw + '"')
-    $url = "https://old.reddit.com/r/$sub/search?q=$q&restrict_sr=on&sort=new&t=month&limit=$PerQuery"
+    $tw = "month"; if ($pack -and $pack.window) { $tw = [string]$pack.window }
+  $url = "https://old.reddit.com/r/$multi/search?q=$q&restrict_sr=on&sort=new&t=$tw&limit=$PerQuery"
     if (-not $SkipNavigate) {
       $np = @{ url = $url } | ConvertTo-Json -Compress
       & $cdp -Method "Page.navigate" -ParamsJson $np -Match "old.reddit.com" | Out-Null
