@@ -1067,6 +1067,29 @@ while ($listener.IsListening) {
       continue
     }
 
+    if ($path -eq "/leads") {
+      $lf = Join-Path $PSScriptRoot "leads.html"
+      if (Test-Path $lf) {
+        $html3 = [System.IO.File]::ReadAllText($lf, [System.Text.Encoding]::UTF8)
+        $hb3 = [System.Text.Encoding]::UTF8.GetBytes($html3)
+        $ctx.Response.StatusCode = 200
+        $ctx.Response.ContentType = "text/html; charset=utf-8"
+        $ctx.Response.ContentLength64 = $hb3.Length
+        $ctx.Response.OutputStream.Write($hb3, 0, $hb3.Length)
+        $ctx.Response.Close()
+      } else { Send-Json $ctx 404 @{ error = "leads.html missing" } }
+      continue
+    }
+
+    if ($path -eq "/api/leads" -and $req.HttpMethod -eq "GET") {
+      $lj = Join-Path $PSScriptRoot "data\leads_signals.json"
+      if (Test-Path $lj) {
+        $lraw = [System.IO.File]::ReadAllText($lj, [System.Text.Encoding]::UTF8)
+        Send-Json $ctx 200 ($lraw | ConvertFrom-Json)
+      } else { Send-Json $ctx 200 @{ scanned_at = ""; unique = 0; items = @() } }
+      continue
+    }
+
     if ($path -eq "/api/water" -and $req.HttpMethod -eq "GET") {
       $sum = Get-Summary
       $counts = @{}

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>线索 · 社么东西</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f6f8fb; color: #1c2024; font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 22px 20px 60px; }
+  .top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: #2b6cf6; color: #fff; display: grid; place-items: center; font-weight: 700; }
+  h1 { font-size: 17px; margin: 0; }
+  .sp { flex: 1; }
+  a.btn { text-decoration: none; border: 1px solid #d9e1ec; background: #fff; color: #2b6cf6; padding: 7px 13px; border-radius: 8px; font-size: 13px; }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+  .card { background: #fff; border: 1px solid #e6edf6; border-radius: 12px; padding: 14px 16px; }
+  .card .k { color: #6b7785; font-size: 12px; }
+  .card .v { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .panel { background: #fff; border: 1px solid #e6edf6; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid #dbe4f0; background: #fff; color: #3d4a5a; padding: 4px 10px; border-radius: 999px; font-size: 12px; cursor: pointer; }
+  .chip.on { background: #e8f0ff; border-color: #b8ccf5; color: #1d4ed8; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e6edf6; border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #eef3f9; vertical-align: top; }
+  th { background: #f8fafd; color: #6b7785; font-weight: 600; font-size: 12px; }
+  tr:last-child td { border-bottom: 0; }
+  td.t a { color: #1f2937; text-decoration: none; }
+  td.t a:hover { color: #2b6cf6; text-decoration: underline; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+  .tag.store { background: #fff2e5; color: #b45309; }
+  .tag.spam { background: #fdeaea; color: #b91c1c; }
+  .meta { color: #8a95a3; font-size: 12px; }
+  .empty { padding: 40px; text-align: center; color: #8a95a3; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="logo">?</div>
+    <h1>线索 · 信号池</h1>
+    <div class="sp"></div>
+    <a class="btn" href="/">看板</a>
+    <a class="btn" href="/profile">业务方向 · 水位</a>
+    <a class="btn" href="/users">成员样本</a>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="k">本次信号</div><div class="v" id="sUniq">—</div></div>
+    <div class="card"><div class="k">去重前</div><div class="v" id="sRaw">—</div></div>
+    <div class="card"><div class="k">查询数</div><div class="v" id="sQ">—</div></div>
+    <div class="card"><div class="k">扫描时间</div><div class="v" id="sAt" style="font-size:14px;">—</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="chips" id="kwChips"></div>
+  </div>
+
+  <div id="tblBox"></div>
+</div>
+
+<script>
+var HUB = 'http://127.0.0.1:8787';
+var ALL = [];
+var KW = '';
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+
+function render() {
+  var rows = ALL.filter(function (r) { return !KW || r.keyword === KW; });
+  if (!rows.length) {
+    document.getElementById('tblBox').innerHTML = '<div class="panel empty">还没有信号。跑一次：<code>powershell -File D:\\DeepSeek\\运营\\leads_scan.ps1</code></div>';
+    return;
+  }
+  var h = '<table><thead><tr><th style="width:34%">帖子</th><th>板块</th><th>命中词</th><th>作者</th><th>互动</th></tr></thead><tbody>';
+  rows.forEach(function (r) {
+    var tags = '';
+    if (r.store) tags += '<span class="tag store">store</span>';
+    if (r.spam) tags += '<span class="tag spam">刷屏</span>';
+    h += '<tr>'
+      + '<td class="t"><a href="' + esc(r.url) + '" target="_blank" rel="noopener noreferrer">' + esc(r.title) + '</a>' + tags + '</td>'
+      + '<td class="meta">' + esc(r.sub) + '</td>'
+      + '<td class="meta">' + esc(r.keyword) + '</td>'
+      + '<td class="meta">' + esc(r.author) + '</td>'
+      + '<td class="meta">' + esc(r.comments) + ' · ' + esc(r.time_text) + '</td>'
+      + '</tr>';
+  });
+  h += '</tbody></table>';
+  document.getElementById('tblBox').innerHTML = h;
+}
+
+function chip(label, val) {
+  var b = document.createElement('button');
+  b.className = 'chip' + (KW === val ? ' on' : '');
+  b.textContent = label;
+  b.onclick = function () { KW = val; paintChips(); render(); };
+  return b;
+}
+
+function paintChips() {
+  var box = document.getElementById('kwChips');
+  box.innerHTML = '';
+  var counts = {};
+  ALL.forEach(function (r) { counts[r.keyword] = (counts[r.keyword] || 0) + 1; });
+  box.appendChild(chip('全部 (' + ALL.length + ')', ''));
+  Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).forEach(function (k) {
+    box.appendChild(chip(k + ' (' + counts[k] + ')', k));
+  });
+}
+
+fetch(HUB + '/api/leads').then(function (r) { return r.json(); }).then(function (d) {
+  ALL = d.items || [];
+  document.getElementById('sUniq').textContent = d.unique != null ? d.unique : ALL.length;
+  document.getElementById('sRaw').textContent = d.raw != null ? d.raw : '—';
+  var dk = document.querySelectorAll('.card .k')[1];
+  if (dk && d.dropped != null) { dk.textContent = '去重前（已过滤 ' + d.dropped + ' 条噪声）'; }
+  document.getElementById('sQ').textContent = d.queries != null ? d.queries : '—';
+  document.getElementById('sAt').textContent = d.scanned_at || '—';
+  paintChips();
+  render();
+}).catch(function (e) {
+  document.getElementById('tblBox').innerHTML = '<div class="panel empty">读不到本地后台：' + esc(e.message) + '</div>';
+});
+</script>
+</body>
+</html>
