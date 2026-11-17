@@ -990,6 +990,20 @@ while ($listener.IsListening) {
       continue
     }
 
+    if ($path -eq "/settings") {
+      $sf = Join-Path $PSScriptRoot "settings.html"
+      if (Test-Path $sf) {
+        $sh = [System.IO.File]::ReadAllText($sf, [System.Text.Encoding]::UTF8)
+        $sb = [System.Text.Encoding]::UTF8.GetBytes($sh)
+        $ctx.Response.StatusCode = 200
+        $ctx.Response.ContentType = "text/html; charset=utf-8"
+        $ctx.Response.ContentLength64 = $sb.Length
+        $ctx.Response.OutputStream.Write($sb, 0, $sb.Length)
+        $ctx.Response.Close()
+      } else { Send-Json $ctx 404 @{ error = "settings.html missing" } }
+      continue
+    }
+
     if ($path -eq "/profile") {
       $pf = Join-Path $PSScriptRoot "profile.html"
       if (Test-Path $pf) {
