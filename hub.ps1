@@ -990,6 +990,110 @@ while ($listener.IsListening) {
       continue
     }
 
+    if ($path -eq "/profile") {
+      $pf = Join-Path $PSScriptRoot "profile.html"
+      if (Test-Path $pf) {
+        $html2 = [System.IO.File]::ReadAllText($pf, [System.Text.Encoding]::UTF8)
+        $hb2 = [System.Text.Encoding]::UTF8.GetBytes($html2)
+        $ctx.Response.StatusCode = 200
+        $ctx.Response.ContentType = "text/html; charset=utf-8"
+        $ctx.Response.ContentLength64 = $hb2.Length
+        $ctx.Response.OutputStream.Write($hb2, 0, $hb2.Length)
+        $ctx.Response.Close()
+      } else { Send-Json $ctx 404 @{ error = "profile.html missing" } }
+      continue
+    }
+
+    if ($path -eq "/api/profile/analyze" -and $req.HttpMethod -eq "POST") {
+      $bd = (New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
+      $txt = [string]$bd.text
+      $low = $txt.ToLower()
+      $bt = "community"
+      if ($low -match "开箱|箱子|opening|case|crate|roulette|upgrade") { $bt = "case_opening" }
+      elseif ($low -match "交易|trade|market|sell|buy|买卖") { $bt = "trading" }
+
+      $w = [ordered]@{ case_opening = 0.0; trading = 0.0; giveaway = 0.0; community = 0.0; esports = 0.0; team_recruit = 0.0; lfg = 0.0 }
+      if ($bt -eq "case_opening") { $w.case_opening = 1.0; $w.trading = 0.6; $w.giveaway = 0.4; $w.community = 0.3; $w.esports = 0.1 }
+      elseif ($bt -eq "trading") { $w.trading = 1.0; $w.case_opening = 0.5; $w.giveaway = 0.3; $w.community = 0.3; $w.esports = 0.1 }
+      else { $w.community = 1.0; $w.trading = 0.5; $w.case_opening = 0.4; $w.esports = 0.2 }
+      if ($low -match "赠品|giveaway|白嫖|抽奖|sorteio|розыгрыш") { $w.giveaway = [Math]::Max($w.giveaway, 0.6) }
+      if ($low -match "电竞|赛事|比赛|esports|tournament") { $w.esports = [Math]::Max($w.esports, 0.3) }
+
+      $excl = @()
+      if ($low -match "不要|排除|不做|不需要") {
+        if ($low -match "战队|招募|team|recruit") { $excl += "战队招募"; $w.team_recruit = 0.0 }
+        if ($low -match "找队友|开黑|lfg|teammate") { $excl += "找队友"; $w.lfg = 0.0 }
+      }
+
+      $regions = @()
+      if ($low -match "巴西|brazil|br\b") { $regions += "BR" }
+      if ($low -match "俄罗斯|russia|ru\b") { $regions += "RU" }
+      if ($low -match "土耳其|turkey|tr\b") { $regions += "TR" }
+      if ($low -match "东南亚|sea|indonesia|philippines|vietnam|thailand") { $regions += "SEA" }
+      if ($low -match "美国|usa|united states") { $regions += "US" }
+      if ($low -match "欧洲|europe|eu\b") { $regions += "EU" }
+      if ($low -match "印度|india") { $regions += "IN" }
+      if ($regions.Count -eq 0) { $regions = @("US", "EU") }
+
+      $langName = @{ BR = "葡语"; RU = "俄语"; TR = "土语"; SEA = "英语+印尼语"; US = "英语"; EU = "英语"; IN = "英语+印地语" }
+      $langs = @()
+      foreach ($rg in $regions) { if ($langName.ContainsKey($rg)) { $langs += $langName[$rg] } }
+      $langs = @($langs | Select-Object -Unique)
+
+      $th = [ordered]@{
+        case_opening = @{ min_members = 150; recent_days = 3 }
+        trading      = @{ min_members = 300; recent_days = 7 }
+        community    = @{ min_members = 1000; recent_days = 7 }
+      }
+
+      Send-Json $ctx 200 @{
+        business_type = $bt; regions = $regions; languages = $langs; exclude = $excl;
+        intents = $w; thresholds = $th; source = $txt
+      }
+      continue
+    }
+
+    if ($path -eq "/api/water" -and $req.HttpMethod -eq "GET") {
+      $sum = Get-Summary
+      $counts = @{}
+      foreach ($sp in @($sum.platforms)) { $counts[[string]$sp.name] = $sp }
+      $items = @()
+      $poolDir = Join-Path $PSScriptRoot "data"
+      foreach ($pf2 in @(@{ p = "Telegram"; days = 7 }, @{ p = "Facebook"; days = 14 })) {
+        $plat = $pf2.p; $dd = $pf2.days
+        $qv = 0; try { $qv = [int]$cfg.quotas.$plat } catch { }
+        $lvl = 0
+        $poolFile = Join-Path $poolDir ("pool_" + $plat.ToLower() + ".json")
+        if (Test-Path $poolFile) {
+          try { $pj = [System.IO.File]::ReadAllText($poolFile, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+                $lvl = @($pj.items).Count } catch { }
+        }
+        $safe = $qv * $dd
+        $days = if ($qv -gt 0) { [Math]::Round($lvl / $qv, 1) } else { $null }
+        $st = "red"
+        if ($days -ne $null) {
+          if ($days -ge $dd) { $st = "green" } elseif ($days -ge 3) { $st = "amber" }
+        }
+        $items += @{ platform = $plat; type = "supply"; level = $lvl; safe = $safe; quota = $qv; days = $days; status = $st }
+      }
+      $items += @{ platform = "WhatsApp"; type = "off"; level = 0; safe = 0; status = "off"; label = "已停用" }
+
+      $cov = @()
+      $dcN = if ($counts.ContainsKey("Discord")) { [int]$counts["Discord"].groups } else { 0 }
+      $stN = if ($counts.ContainsKey("Steam")) { [int]$counts["Steam"].groups } else { 0 }
+      $rdN = if ($counts.ContainsKey("Reddit")) { [int]$counts["Reddit"].groups } else { 0 }
+      $cov += @{ platform = "Steam"; done = $stN; total = $stN; unit = "群成员已抓"; pct = 100; status = "green"; note = "已同步" }
+      $cov += @{ platform = "Discord"; done = $dcN; total = $dcN; unit = "服已统计"; pct = 100; status = "green"; note = "只统计不加入" }
+      $rdTot = [Math]::Max($rdN, 18)
+      $cov += @{ platform = "Reddit"; done = $rdN; total = $rdTot; unit = "板块已订阅"; pct = [Math]::Min(100, [int]($rdN * 100 / $rdTot)); status = "red"; note = "客观供给约 18 个" }
+
+      Send-Json $ctx 200 @{
+        subtitle = "供给型看水位与天数；覆盖型看进度。只读版：数字为当前池/库快照。"
+        items = $items; coverage = $cov
+      }
+      continue
+    }
+
     if ($path -eq "/api/wa" -and $req.HttpMethod -eq "GET") {
       $waJson = Join-Path $PSScriptRoot "data\wa_candidates.json"
       $items = @(); $queries = 0; $mode = "search_only"; $maxJoin = 0

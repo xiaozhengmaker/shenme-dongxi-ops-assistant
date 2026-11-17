@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>业务方向 · 社么东西</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --line: #e6e8eb; --ink: #1f2329; --dim: #8a9099;
+    --brand: #2b6cf6; --green: #17a673; --amber: #d99a00; --red: #e1483c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 20px 16px 60px; }
+  .top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .top .name { font-size: 16px; font-weight: 700; }
+  .top .sp { flex: 1; }
+  a.btn, button { font: inherit; }
+  .btn { border: 1px solid var(--line); background: #fff; color: var(--ink);
+         padding: 6px 12px; border-radius: 8px; cursor: pointer; text-decoration: none; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+          padding: 16px; margin-bottom: 14px; }
+  .card h3 { margin: 0 0 4px; font-size: 15px; }
+  .card .sub { color: var(--dim); font-size: 12px; margin-bottom: 12px; }
+  textarea { width: 100%; min-height: 96px; resize: vertical; padding: 10px 12px;
+             border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .lbl { width: 84px; color: var(--dim); flex: 0 0 auto; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+          border-radius: 999px; background: #eef2ff; color: #2b4bb0; font-size: 13px; }
+  .chip .x { cursor: pointer; opacity: .6; }
+  .chip .x:hover { opacity: 1; }
+  .chip.add { background: #fff; border: 1px dashed var(--line); color: var(--dim); cursor: pointer; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+          border: 1px solid var(--line); border-radius: 10px; cursor: pointer; background: #fff; }
+  .pill.on { border-color: var(--brand); background: #eef2ff; color: #2b4bb0; font-weight: 600; }
+  .bars { display: grid; gap: 8px; margin-top: 4px; }
+  .bar { display: grid; grid-template-columns: 96px 1fr 46px; align-items: center; gap: 10px; }
+  .bar .nm { color: #4a5058; font-size: 13px; }
+  .bar .track { height: 10px; background: #eef0f3; border-radius: 6px; overflow: hidden; }
+  .bar .fill { height: 100%; background: linear-gradient(90deg,#7aa2ff,#2b6cf6); border-radius: 6px; }
+  .bar .val { text-align: right; font-variant-numeric: tabular-nums; color: #4a5058; font-size: 13px; }
+  .num { width: 64px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px;
+         font: inherit; text-align: center; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .quotas { border-top: 1px dashed var(--line); margin-top: 12px; padding-top: 12px; }
+  .qline { display: grid; grid-template-columns: 92px 84px 1fr; gap: 10px; align-items: center; }
+  .muted { color: var(--dim); font-size: 12px; }
+  .tanks { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+  .tank { text-align: center; }
+  .glass { position: relative; height: 150px; width: 68px; margin: 0 auto;
+           border: 2px solid #d7dbe0; border-top: none; border-radius: 0 0 12px 12px;
+           background: #fafbfc; overflow: hidden; }
+  .water { position: absolute; left: 0; right: 0; bottom: 0;
+           background: linear-gradient(180deg,#6f9dff,#2b6cf6); transition: height .4s; }
+  .water.warn { background: linear-gradient(180deg,#f0c250,#d99a00); }
+  .water.bad { background: linear-gradient(180deg,#ef8a80,#e1483c); }
+  .safe { position: absolute; left: -6px; right: -6px; border-top: 2px dashed #b9c0c8; }
+  .tank .nm { margin-top: 8px; font-weight: 600; }
+  .tank .st { font-size: 12px; color: var(--dim); }
+  .prog { height: 8px; background: #eef0f3; border-radius: 6px; overflow: hidden; margin-top: 6px; }
+  .prog i { display: block; height: 100%; background: var(--green); }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #f0f2f5; color: #5a6066; }
+  .tag.g { background: #e7f7ef; color: #0f8a5f; }
+  .tag.y { background: #fdf3dc; color: #96700a; }
+  .tag.r { background: #fdecea; color: #b3342a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <span class="name">业务方向 · 只读预览</span>
+    <span class="tag">只读版：不写入、不加群</span>
+    <span class="sp"></span>
+    <a class="btn" href="/">看板</a>
+    <a class="btn" href="/users">成员样本</a>
+  </div>
+
+  <div class="card">
+    <h3>你做什么</h3>
+    <div class="sub">用一段话说清业务、目标市场、想拉的人、不要什么。分析结果只在页面里，点「应用」暂不开放。</div>
+    <textarea id="biz"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn primary" id="btnAnalyze">分析这段描述</button>
+      <span class="muted" id="analyzeHint">示例：CS2 第三方开箱站（SkinVS），做箱子和皮肤交易，目标巴西/俄罗斯/土耳其/东南亚，不要战队招募和找队友</span>
+    </div>
+  </div>
+
+  <div id="preview" style="display:none">
+    <div class="card">
+      <h3>我读懂了这些</h3>
+      <div class="sub">全部可改；改的是页面上的值，只读版不会保存。</div>
+
+      <div class="row"><span class="lbl">业务类型</span><span id="types"></span></div>
+      <div class="row"><span class="lbl">目标市场</span><span id="regions"></span></div>
+      <div class="row"><span class="lbl">语言</span><span id="langs"></span></div>
+      <div class="row"><span class="lbl">不要</span><span id="excl"></span></div>
+    </div>
+
+    <div class="card">
+      <h3>要拉的人（相关度权重）</h3>
+      <div class="sub">拖条或直接改数字；0 表示完全不收。</div>
+      <div class="bars" id="intents"></div>
+    </div>
+
+    <div class="card">
+      <h3>门槛</h3>
+      <div class="sub">按意图分别设，小群粘性高的类型放宽人数、收紧活跃。</div>
+      <div class="bars" id="thresholds"></div>
+    </div>
+
+    <div class="card">
+      <h3>配额建议</h3>
+      <div class="sub">平台总量来自设置；意图配额按权重分配，弹性补缺。</div>
+      <div id="quotas" class="quotas"></div>
+    </div>
+
+    <div class="card" style="display:flex;align-items:center;gap:10px">
+      <button class="btn" id="btnReanalyze">重新分析</button>
+      <button class="btn primary" id="btnApply" disabled title="只读版暂不写入">应用并重建候选池</button>
+      <span class="muted">只读版：第二步开放写入。</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>水位</h3>
+    <div class="sub" id="waterSub">读取中…</div>
+    <div class="tanks" id="tanks"></div>
+    <div id="cov" style="margin-top:14px"></div>
+  </div>
+</div>
+
+<script src="src_profile.js"></script>
+</body>
+</html>
