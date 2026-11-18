@@ -2171,6 +2171,7 @@ function Get-UsersPayload([hashtable]$q) {
 
 
 
+
   return @{
 
 
@@ -2747,9 +2748,25 @@ function Get-Summary {
 
 
 
+
   [array]::Reverse($rev)
 
 
+
+  # --- local todos ---
+  $localTodos = @()
+  try {
+    $tlPath = Join-Path $here "data/todos_local.json"
+    if (Test-Path $tlPath) {
+      $tl = Get-Content $tlPath -Raw -Encoding UTF8 | ConvertFrom-Json
+      foreach ($x in @($tl)) {
+        if (-not $x) { continue }
+        $nm2 = [string]$x.title
+        if (-not $nm2) { continue }
+        $localTodos += @{ name = $nm2; status = [string]$x.status; platform = [string]$x.platform; due_at = [string]$x.due_at; check_at = [string]$x.check_at; note = [string]$x.note }
+      }
+    }
+  } catch { }
 
   return @{
 
@@ -2767,11 +2784,12 @@ function Get-Summary {
 
 
 
-    todos    = @($todo | Select-Object -First 8)
+
+    todos    = @(@($localTodos) + @($todo) | Select-Object -First 8)
 
 
 
-    todoCount = $todo.Count
+    todoCount = @($localTodos).Count + @($todo).Count
 
 
 

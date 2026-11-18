@@ -1,0 +1,47 @@
+{
+  "id": "wa-a7-observe-48h",
+  "platform": "whatsapp",
+  "target": "A7 Skins - C/V SKINS CS2 #1",
+  "invite": "E2hUAwnmo1Z3t1Pq7tAvrv",
+  "joined_confirmed_at": "2026-11-18T19:37:03",
+  "windows": [
+    {
+      "id": "w1",
+      "from": "2026-11-18T19:37:03",
+      "to": "2026-11-19T19:37:03",
+      "label": "0-24h"
+    },
+    {
+      "id": "w2",
+      "from": "2026-11-19T19:37:03",
+      "to": "2026-11-20T19:37:03",
+      "label": "24-48h"
+    }
+  ],
+  "excluded": [
+    "community welcome page",
+    "announcement group",
+    "system join notices"
+  ],
+  "fields": [
+    "visible_nonsystem_messages",
+    "trade_posts",
+    "merchant_oneway_offers",
+    "explicit_buy_or_trade_requests"
+  ],
+  "rules": {
+    "unknowns": "无法判断的保留 null，不填 0",
+    "coverage": "聊天视图只覆盖部分时段 -> coverage=partial，数量写「至少 N 条」",
+    "member_count": "继续 null，不填 0",
+    "no_raw": "只留群级汇总，不记发言人/号码/消息原文"
+  },
+  "status": "pending",
+  "check_at": "2026-11-19T19:37:03",
+  "due_at": "2026-11-20T19:37:03",
+  "decision": {
+    "trade_plus_demand": "两个区间都看到交易帖 且 至少 1 条明确买求/换购 -> 观察到持续交易和需求，再对 RB 独立复核",
+    "only_offers": "只看到商家单向报价 -> 销售公告型",
+    "insufficient": "可见范围不足 -> 证据不足"
+  },
+  "scope_note": "该观察决定是否值得扩展同类来源；成员采集另行评估"
+}
