@@ -77,9 +77,15 @@ if (-not $pyCmd) {
 } else {
   $badPy = 0
   foreach ($f in $pys) {
-    $args = @($pyCmd.args) + @("-c", "import ast,io,sys;ast.parse(io.open(sys.argv[1],encoding='utf-8').read())", $f.FullName)
-    & $pyCmd.exe @args *> $null
-    if ($LASTEXITCODE -ne 0) { $badPy++; Say ("  FAIL " + $f.Name) }
+    $args = @($pyCmd.args) + @("-c", "import ast,io,sys;ast.parse(io.open(sys.argv[1],encoding='utf-8-sig').read())", $f.FullName)
+    $pyOut = & $pyCmd.exe @args 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      $badPy++
+      $first = @($pyOut | Where-Object { $_ -match "\S" } | Select-Object -First 1)
+      $extra = ""
+      if ($first) { $extra = " : " + [string]$first }
+      Say ("  FAIL " + $f.Name + $extra)
+    }
   }
   Say ("  " + $pys.Count + " files, " + $badPy + " failed")
   if ($badPy -gt 0) { $fail++ }
