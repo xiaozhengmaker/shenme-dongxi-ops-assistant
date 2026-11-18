@@ -1532,9 +1532,9 @@ while ($listener.IsListening) {
 
               retry_not_before = [string]$fb.retry_not_before; wait_sec = [int]$fb.wait_sec
 
-              trigger = [string]$fb.trigger; pending = [int]$fb.pending_count
+              trigger = [string]$fb.trigger; pending = [int]$fb.pending_count; retry_due = [string]$fb.retry_due
 
-              blocked = $((Get-Date) -lt [datetime]::Parse([string]$fb.retry_not_before))
+              blocked = $((Get-Date) -lt [datetime]::Parse([string]$fb.retry_not_before, $null, [System.Globalization.DateTimeStyles]::RoundtripKind))
 
             }
 

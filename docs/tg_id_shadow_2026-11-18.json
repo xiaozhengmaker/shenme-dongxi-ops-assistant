@@ -1,0 +1,30 @@
+{
+  "reconcile_tail": {
+    "resolved": 7,
+    "rate_limited": 33,
+    "unknown_error": 7,
+    "other_error": 3,
+    "total": 50
+  },
+  "shadow": {
+    "run_id": "run-20261118171936",
+    "objects": 90,
+    "comparable": 32,
+    "missing_stable_id": 58,
+    "stable_id_coverage": 0.356,
+    "conflict_same_id_multi_keys": 0,
+    "conflict_same_key_multi_ids": 0,
+    "db_both_forms": 1,
+    "dup_total_comparable": 26,
+    "dup_would_change": 25,
+    "dup_would_stay": 1
+  },
+  "recovery": {
+    "recover_targets": 51,
+    "unique": 51,
+    "lost_from_snapshot": 0,
+    "dup_in_list": 0,
+    "retry_due": "beseda_fayzik",
+    "deferred": 50
+  }
+}

@@ -15,7 +15,7 @@ function Save-FloodState($obj) {
 function Get-FloodDeadline([string]$platform) {
   $s = Get-FloodState
   if (-not $s -or -not $s.$platform) { return $null }
-  try { return [datetime]::Parse($s.$platform.retry_not_before) } catch { return $null }
+  try { return [datetime]::Parse([string]$s.$platform.retry_not_before, $null, [System.Globalization.DateTimeStyles]::RoundtripKind) } catch { return $null }
 }
 
 function Test-FloodBlocked([string]$platform) {
@@ -31,15 +31,16 @@ function Set-FloodBlocked([string]$platform, [int]$waitSec, [string]$trigger, [s
   $prev = $null
   if ($old -and $old.$platform) { $prev = $old.$platform }
   if ($prev) {
-    try { $pd = [datetime]::Parse($prev.retry_not_before); if ($pd -gt $deadline) { $deadline = $pd } } catch { }
+    try { $pd = [datetime]::Parse([string]$prev.retry_not_before, $null, [System.Globalization.DateTimeStyles]::RoundtripKind); if ($pd -gt $deadline) { $deadline = $pd } } catch { }
   }
   $obj = @{}
   if ($old) { foreach ($p in $old.PSObject.Properties) { $obj[$p.Name] = $p.Value } }
   $obj[$platform] = @{
-    retry_not_before = $deadline.ToString("s")
+    retry_not_before = $deadline.ToString("o")
     wait_sec         = $waitSec
     trigger          = $trigger
     first_seen_at    = $(if ($prev -and $prev.first_seen_at) { $prev.first_seen_at } else { $now.ToString("s") })
+    retry_due        = $trigger
     pending_count    = @($pending).Count
     pending          = @($pending)
   }
