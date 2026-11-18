@@ -3010,7 +3010,7 @@ while ($listener.IsListening) {
 
 
 
-      $ashInfo = @{ mode = "off"; mappings = 0; resolved_with_id = 0; attempts_with_id = 0; attempts = 0; last_run = "" }
+      $ashInfo = @{ mode = "off"; mappings = 0; resolved = 0; resolved_with_id = 0; attempts_with_id = 0; attempts = 0; last_run = "" }
 
       try {
 
@@ -3032,7 +3032,10 @@ while ($listener.IsListening) {
 
           $ashInfo.attempts_with_id = [int]$mj.resolved
 
-          $ashInfo.resolved_with_id = [int]$mj.resolved
+          $ashInfo.resolved = [int]$mj.resolved
+
+          $ashInfo.resolved_with_id = [int]$mj.resolved
+
           $ashInfo.attempts = [int]$mj.resolved + [int]$mj.miss
 
         }
@@ -7462,6 +7465,5 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 }
-
 
 

@@ -1,0 +1,20 @@
+{
+  "historical_groups": 48,
+  "historical_numeric": 3,
+  "historical_handle_only": 45,
+  "numeric_ratio": 0.0625,
+  "alias_handles": 32,
+  "covered_handle_groups": 1,
+  "coverage_of_handle_groups": 0.0222,
+  "coverage_of_all_groups": 0.0208,
+  "alias_conflicts": 0,
+  "conflict_handles": [],
+  "covered": [
+    {
+      "handle": "cs2uzb",
+      "peer_ids": [
+        "1823039758"
+      ]
+    }
+  ]
+}
