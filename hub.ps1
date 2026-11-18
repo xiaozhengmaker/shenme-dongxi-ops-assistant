@@ -179,27 +179,99 @@ function Add-Event([string]$m) {
 
 function Get-PoolPath($pf) { Join-Path $PSScriptRoot ("data\pool_" + ([string]$pf).ToLower() + ".json") }
 
-function Save-CandidatePool($pf) {
+function Get-PoolWatermark([string]$pf) {
+  switch ([string]$pf) {
+    "Telegram" { return 60 }
+    "Facebook" { return 30 }
+    "Steam"    { return 20 }
+    default    { return 10 }
+  }
+}
+
+function Get-PoolTtlDays { $d = 14; try { if ($cfg.pool -and $cfg.pool.ttl_days) { $d = [int]$cfg.pool.ttl_days } } catch { }; return $d }
+
+function ConvertTo-PoolKey($it) {
+  $u = ([string]$it.u).TrimStart("@").ToLower()
+  if ($u) { return "u:" + $u }
+  if ([string]$it.id) { return "id:" + ([string]$it.id) }
+  if ([string]$it.h) { return "h:" + ([string]$it.h) }
+  return ""
+}
+
+function Read-PoolRaw([string]$pf) {
+  $path = Get-PoolPath $pf
+  if (-not (Test-Path $path)) { return @{ savedAt = ""; items = @() } }
   try {
-    $items = @()
-    foreach ($k in $state.candidates.Keys) { $items += $state.candidates[$k] }
+    $o = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    return @{ savedAt = [string]$o.savedAt; items = @($o.items) }
+  } catch { return @{ savedAt = ""; items = @() } }
+}
+
+function Get-PoolItems([string]$pf) {
+  $raw = Read-PoolRaw $pf
+  $now = (Get-Date).ToUniversalTime()
+  $ttl = Get-PoolTtlDays
+  $out = @{}
+  foreach ($it in @($raw.items)) {
+    if (-not $it) { continue }
+    $k = ConvertTo-PoolKey $it
+    if (-not $k) { continue }
+    $exp = [string]$it.expiresAt
+    if ($exp) {
+      try { if ([DateTime]::Parse($exp).ToUniversalTime() -lt $now) { continue } } catch { }
+    } else {
+      $added = [string]$it.addedAt
+      $base = if ($added) { try { [DateTime]::Parse($added).ToUniversalTime() } catch { $now } } else { $now }
+      if (($now - $base).TotalDays -gt $ttl) { continue }
+    }
+    if (-not $out.ContainsKey($k)) { $out[$k] = $it }
+  }
+  return @($out.Values)
+}
+
+function Save-PoolItems([string]$pf, $items, [int]$cap = 600) {
+  try {
     $dir = Join-Path $PSScriptRoot "data"
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
-    $obj = @{ savedAt = (Get-Date).ToString("s"); platform = [string]$pf; count = $items.Count; items = $items }
-    [System.IO.File]::WriteAllText((Get-PoolPath $pf), ($obj | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
-    return $items.Count
+    $arr = @($items)
+    if ($arr.Count -gt $cap) {
+      $arr = @($arr | Sort-Object { -(try { [int]$_.n } catch { 0 }) } | Select-Object -First $cap)
+    }
+    $obj = @{ savedAt = (Get-Date).ToString("s"); platform = [string]$pf; count = $arr.Count; items = $arr }
+    [System.IO.File]::WriteAllText((Get-PoolPath $pf), ($obj | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
+    return $arr.Count
   } catch { return 0 }
 }
 
+function Merge-IntoPool([string]$pf, $newItems, [string]$source) {
+  $ttl = Get-PoolTtlDays
+  $now = (Get-Date).ToUniversalTime()
+  $exp = $now.AddDays($ttl).ToString("o")
+  $merged = @{}
+  foreach ($it in @(Get-PoolItems $pf)) { $merged[(ConvertTo-PoolKey $it)] = $it }
+  $added = 0
+  foreach ($it in @($newItems)) {
+    if (-not $it) { continue }
+    $k = ConvertTo-PoolKey $it
+    if (-not $k) { continue }
+    if ($merged.ContainsKey($k)) { continue }
+    $copy = @{}
+    foreach ($p in $it.PSObject.Properties) { $copy[$p.Name] = $p.Value }
+    $copy["addedAt"] = $now.ToString("o")
+    $copy["expiresAt"] = $exp
+    if (-not $copy.ContainsKey("src") -or -not $copy["src"]) { $copy["src"] = $source }
+    $merged[$k] = $copy
+    $added++
+  }
+  $n = Save-PoolItems $pf @($merged.Values)
+  return @{ added = $added; depth = $n }
+}
+
+function Get-PoolDepth([string]$pf) { return @(Get-PoolItems $pf).Count }
+
 function Load-CandidatePool($pf, $maxAgeHours) {
-  $path = Get-PoolPath $pf
-  if (-not (Test-Path $path)) { return @() }
-  try {
-    $o = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
-    $t0 = [DateTime]::Parse([string]$o.savedAt)
-    if (((Get-Date) - $t0).TotalHours -gt $maxAgeHours) { return @() }
-    return @($o.items)
-  } catch { return @() }
+  # 兼容旧调用：忽略全局 maxAgeHours，统一用逐项 TTL
+  return @(Get-PoolItems $pf)
 }
 
 function Start-Run {
@@ -227,7 +299,9 @@ $state.extAt = ""
     $uk = ("@" + ([string]$it.u).TrimStart("@")).ToLower()
     if ($state.skipSet.ContainsKey($uk)) { continue }
     if ($state.candidates.ContainsKey($uk)) { continue }
-    $state.candidates[$uk] = @{ id = $uk; u = [string]$it.u; title = [string]$it.title; n = [int]$it.n; q = [string]$it.q; src = "pool" }
+    $ttl2 = [string]$it.title
+    if (-not $ttl2) { $ttl2 = [string]$it.t }
+    $state.candidates[$uk] = @{ id = $uk; u = [string]$it.u; title = $ttl2; n = [int]$it.n; q = [string]$it.q; src = "pool"; h = [string]$it.h; k = [string]$it.k }
     $poolAdded++
   }
   if ($poolAdded -gt 0) { Add-Event ("候选池载入 " + $poolAdded + " 个") }
@@ -242,9 +316,33 @@ $state.extAt = ""
 }
 
 function Build-JoinQueue {
+  # 优先用持久化池（存量轮转），池空时退回本次搜索结果
+  $pooled = @(Get-PoolItems $Platform)
   $list = @()
-  foreach ($k in $state.candidates.Keys) { $list += $state.candidates[$k] }
+  if ($pooled.Count -gt 0) {
+    $list = $pooled
+    Write-Host ("[hub] 队列来源=候选池 存量 " + $pooled.Count)
+  } else {
+    foreach ($k in $state.candidates.Keys) { $list += $state.candidates[$k] }
+    Write-Host ("[hub] 队列来源=本轮搜索 候选 " + @($list).Count)
+  }
   $list = $list | Sort-Object { -[int]$_.n }
+  if ($Platform -eq "Telegram" -and @($list).Count -gt 0) {
+    $rxRel = '(?i)(cs2|cs:go|csgo|counter[\s\-]?strike)'
+    $rxDrop = '(?i)(hotkey|keybind|keyboard|sensitiv|trainer|coach|custom map|cheat|hack|ban|vac|airdrop|news|sport|football|movie|music|standoff|para1el|ranking|giveaway|rental|casino|poker)|новост|анонс|дайджест|подборка)'
+    $b0 = @($list).Count
+    $list = @($list | Where-Object {
+      $tt = [string]$_.t
+      if (-not $tt) { $tt = [string]$_.title }
+      if ($tt) {
+        if ($tt -notmatch $rxRel) { return $false }
+        if ($tt -match $rxDrop) { return $false }
+      }
+      return $true
+    })
+    Write-Host ("[hub] 池内相关性过滤 " + $b0 + " -> " + @($list).Count)
+    Add-Event ("池内相关性过滤 " + $b0 + " -> " + @($list).Count)
+  }
   # 二重保险：候选池/搜索结果里若含跳过名单内的群，这里再剔一次
   $list = @($list | Where-Object {
     $uk2 = ("@" + ([string]$_.u).TrimStart("@")).ToLower()
@@ -264,6 +362,18 @@ function Build-JoinQueue {
   $state.phase = "join"
   "[hub] 搜索完成，候选 $($list.Count)，本轮计划加入 $($state.queue.Count)"
 }
+
+function Remove-FromPool([string]$pf, $target) {
+  try {
+    $k = ConvertTo-PoolKey $target
+    if (-not $k) { return }
+    $items = @(Get-PoolItems $pf)
+    $kept = @($items | Where-Object { (ConvertTo-PoolKey $_) -ne $k })
+    if ($kept.Count -ne $items.Count) { Save-PoolItems $pf $kept | Out-Null }
+  } catch { }
+}
+
+function Reset-FsCacheSafe { try { Reset-FsCache } catch { } }
 
 function Write-JoinRecord($target, $result) {
   $now = Now-Unix
@@ -471,8 +581,19 @@ function Sync-ScheduleTask {
   & schtasks /Create /TN $tn /TR $tr /SC DAILY /ST $time /F /RL LIMITED 2>&1 | Out-Null
   return @{ registered = ($LASTEXITCODE -eq 0); time = $time }
 }
+$script:FsCache = $null
+$script:FsCacheAt = [datetime]::MinValue
+function Get-FsCached([int]$ttlSec = 60) {
+  $now = Get-Date
+  if ($script:FsCache -and (($now - $script:FsCacheAt).TotalSeconds -lt $ttlSec)) { return $script:FsCache }
+  $script:FsCache = @(Get-FsRecords)
+  $script:FsCacheAt = $now
+  return $script:FsCache
+}
+function Reset-FsCache { $script:FsCache = $null; $script:FsCacheAt = [datetime]::MinValue }
+
 function Get-Summary {
-  $recs = @(Get-FsRecords)
+  $recs = @(Get-FsCached 60)
   $today = (Get-Date).ToString("yyyy/MM/dd")
   $plats = @{}
   $series = @{}
@@ -864,6 +985,15 @@ while ($listener.IsListening) {
         $state.running = $true
         Build-JoinQueue | Write-Host
       $poolN = Save-CandidatePool $Platform
+  try {
+    $fresh = @()
+    foreach ($k2 in $state.candidates.Keys) { $fresh += $state.candidates[$k2] }
+    $mg = Merge-IntoPool $Platform $fresh "search"
+    Write-Host ("[hub] 候选入池新增 " + $mg.added + "，池深 " + $mg.depth + "（水位 " + (Get-PoolWatermark $Platform) + "）")
+    if ($mg.depth -lt (Get-PoolWatermark $Platform)) {
+      Add-Event ("[池] " + $Platform + " 池深 " + $mg.depth + " 低于水位 " + (Get-PoolWatermark $Platform) + "，需补水")
+    }
+  } catch { Write-Warning ("[hub] pool merge: " + $_.Exception.Message) }
       if ($poolN -gt 0) { Add-Event ("已存候选池 " + $poolN + " 个") }
       }
       Send-Json $ctx 200 @{ ok = $true; added = $added; candidates = $state.candidates.Count; phase = $state.phase }
@@ -1425,30 +1555,41 @@ while ($listener.IsListening) {
       elseif ($kind -eq "search") {
         $q = $state.pending.query
         $cnt = 0
+        if (-not $state.funnel) { $state | Add-Member -NotePropertyName funnel -NotePropertyValue @{} -Force }
+        $fn = $state.funnel
+        foreach ($fk in @("unique","eligible","joined","pending","unknown","small","offtopic","dedup","priv","excluded")) {
+          if (-not $fn.ContainsKey($fk)) { $fn[$fk] = 0 }
+        }
         foreach ($c in @($r.value)) {
           if (-not $c) { continue }
-          if ($c.bc) { continue }
-          if ([int]$c.n -lt $state.minNow) { continue }
+          $fn.unique++
+          # bc 语义按平台区分：Facebook 的 bc = 已加入；Telegram 的 bc = 广播频道（两者都不是可加入目标）
+          if ($c.bc) { if ($Platform -eq 'Facebook') { $fn.joined++ } else { $fn.excluded++ }; continue }
+          if ($c.priv) { $fn.priv++; continue }
+          if ($c.req) { $fn.pending++; continue }
+          if ([int]$c.n -le 0) { $fn.unknown++; continue }
+          if ([int]$c.n -lt $state.minNow) { $fn.small++; continue }
           $id = [string]$c.id
-          if ($seen.ContainsKey($id)) { continue }
-          if ($c.u -and $seen.ContainsKey(([string]$c.u).ToLower())) { continue }
+          if ($seen.ContainsKey($id)) { $fn.dedup++; continue }
+          if ($c.u -and $seen.ContainsKey(([string]$c.u).ToLower())) { $fn.dedup++; continue }
           $t = ([string]$c.title).Trim().ToLower()
-          if ($seenTitles.ContainsKey($t)) { continue }
-          if ($c.title -match $exclude) { continue }
-          if ($c.priv) { continue }
+          if ($seenTitles.ContainsKey($t)) { $fn.dedup++; continue }
+          if ($c.title -match $exclude) { $fn.offtopic++; continue }
           if ($Platform -eq 'Facebook') {
             $tn = [string]$c.title
-            if ($tn -notmatch '(?i)(cs2|csgo|cs:go|counter[\s\-]?strike|skinvs|dmarket|buff163|skinport|csgoroll|csgoempire|skins? (trade|market|sell|buy)|vaka|swap\.gg)') { continue }
+            if ($tn -notmatch '(?i)(cs2|csgo|cs:go|counter[\s\-]?strike|skinvs|dmarket|buff163|skinport|csgoroll|csgoempire|skins? (trade|market|sell|buy)|vaka|swap\.gg)') { $fn.offtopic++; continue }
           }
-          if ($state.candidates.ContainsKey($id)) { continue }
+          if ($state.candidates.ContainsKey($id)) { $fn.dedup++; continue }
           $uk = ("@" + ([string]$c.u)).ToLower()
-          if ($c.u -and $state.skipSet -and $state.skipSet.ContainsKey($uk)) { continue }
+          if ($c.u -and $state.skipSet -and $state.skipSet.ContainsKey($uk)) { $fn.excluded++; continue }
           $state.candidates[$id] = @{ id = $id; u = [string]$c.u; title = [string]$c.title; n = [int]$c.n; q = $q; h = [string]$c.h; k = [string]$c.k }
           Write-Host ("[hub] cand id=" + $id + " u=" + $c.u + " h=" + (("" + $c.h).Length) + " k=" + $c.k)
+          $fn.eligible++
           $cnt++
         }
         $rawN = @($r.value).Count
         Write-Host ("[hub] search '$q' raw=$rawN new=$cnt min=$($state.minNow) seen=$($seen.Count)")
+        Write-Host ("[hub] funnel " + $Platform + " unique=" + $fn.unique + " eligible=" + $fn.eligible + " joined=" + $fn.joined + " pending=" + $fn.pending + " unknown=" + $fn.unknown + " small=" + $fn.small + " offtopic=" + $fn.offtopic + " dedup=" + $fn.dedup + " priv=" + $fn.priv + " excluded=" + $fn.excluded)
         if ($rawN -gt 0 -and $cnt -eq 0) {
           $s0 = @($r.value)[0]
           Write-Host ("[hub] sample raw: n=" + $s0.n + " t=" + $s0.title + " bc=" + $s0.bc)
@@ -1498,6 +1639,7 @@ while ($listener.IsListening) {
           $state.fails++
         }
         Write-Host ("[hub] join " + $tgt.title + " => " + $v)
+  if ($v -eq "joined") { Reset-FsCacheSafe }
         $nm = if ($tgt) { $tgt.title } else { "?" }
         Add-Event ($nm + " → " + $v)
         if ($state.fails -ge $maxFails) {
