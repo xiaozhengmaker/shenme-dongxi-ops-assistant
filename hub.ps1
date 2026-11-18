@@ -374,6 +374,14 @@ function Build-JoinQueue {
     $list = @($list | Where-Object { ([string]$_.id).Trim() -ne "" -or ([string]$_.title).Trim() -ne "" })
     if ($before -ne $list.Count) { Write-Host ("[hub] 剔除无 id/title 的 FB 候选 " + ($before - $list.Count) + " 个") }
   }
+  # 统一字段：池里的候选用 t/n/h/k，搜索结果用 title/u/h/k，这里归一化，避免 dispatch 时 title 为空
+  $list = @($list | ForEach-Object {
+    $ttl3 = [string]$_.title; if (-not $ttl3) { $ttl3 = [string]$_.t }
+    @{
+      id = [string]$_.id; u = [string]$_.u; title = $ttl3; n = [int]$_.n;
+      q = [string]$_.q; h = [string]$_.h; k = [string]$_.k; src = [string]$_.src
+    }
+  })
   $take = [Math]::Min($need, $list.Count)
   $i = 0
   foreach ($c in $list) {
