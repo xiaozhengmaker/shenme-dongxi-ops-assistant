@@ -102,7 +102,7 @@ if (-not $st) {
 $linksHash = @{}
 if ($st.links) {
   foreach ($lp in $st.links.PSObject.Properties) {
-    if ($lp.Name -and $lp.Name -notin @("Keys", "Values", "Count")) { $linksHash[$lp.Name] = [int]$lp.Value }
+    if ($lp.Name -and $lp.Name -notin @("Keys", "Values", "Count")) { $iv = 0; if ([int]::TryParse([string]$lp.Value, [ref]$iv)) { $linksHash[$lp.Name] = $iv } else { $linksHash[$lp.Name] = 0 } }
   }
 }
 $st | Add-Member -NotePropertyName links -NotePropertyValue $linksHash -Force

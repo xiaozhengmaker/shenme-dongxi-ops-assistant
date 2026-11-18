@@ -653,12 +653,23 @@ function pageFBJoin(arg) {
     let wait = 0;
     const verify = () => {
       wait++;
+      // 加入后可能弹出「入群问答」：识别到就立刻返回 approval，不提交答案
+      const dlgs = [...document.querySelectorAll('div[role="dialog"]')];
+      for (const d of dlgs) {
+        const dt = (d.innerText || "");
+        if (/(加入小组|问题|Questions|回答|Submit|提交)/i.test(dt) && dt.length > 10) {
+          const closeBtn = [...d.querySelectorAll('div[role="button"],a')].find(b => /^(关闭|Close|取消|Cancel)$/i.test((b.innerText || "").trim()));
+          if (closeBtn) { try { closeBtn.click(); } catch (e) {} }
+          done("approval", "question_dialog");
+          return;
+        }
+      }
       const now = ((card.innerText || "") + " " + ((card.parentElement && card.parentElement.innerText) || ""));
       if (/已加入|Joined|已申请|取消申请|访问|Visit/.test(now)) { done("joined", ""); return; }
-      if (wait > 10) { done("pending", "no_state_change"); return; }
-      setTimeout(verify, 800);
+      if (wait > 14) { done("pending", "no_state_change"); return; }
+      setTimeout(verify, 1500);
     };
-    setTimeout(verify, 1400);
+    setTimeout(verify, 1600);
   };
 
   step();

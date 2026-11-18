@@ -329,7 +329,7 @@ function Build-JoinQueue {
   $list = $list | Sort-Object { -[int]$_.n }
   if ($Platform -eq "Telegram" -and @($list).Count -gt 0) {
     $rxRel = '(?i)(cs2|cs:go|csgo|counter[\s\-]?strike)'
-    $rxDrop = '(?i)(hotkey|keybind|keyboard|sensitiv|trainer|coach|custom map|cheat|hack|ban|vac|airdrop|news|sport|football|movie|music|standoff|para1el|ranking|giveaway|rental|casino|poker)|новост|анонс|дайджест|подборка)'
+    $rxDrop = '(?i)(hotkey|keybind|keyboard|sensitiv|trainer|coach|custom map|cheat|hack|ban|vac|airdrop|news|sport|football|movie|music|standoff|para1el|ranking|giveaway|rental|casino|poker|новост|анонс|дайджест|подборка)'
     $b0 = @($list).Count
     $list = @($list | Where-Object {
       $tt = [string]$_.t
@@ -1488,13 +1488,35 @@ while ($listener.IsListening) {
         }
         Write-Host (Start-Run)
         # poolOnly：跳过关键词搜索，直接用候选池建队列（用于「池里已经有钱，先花掉」）
+        if ($body.skipSearch) {
+          try {
+            $state.queries.Clear()
+            Add-Event "[hub] skipSearch：本平台只走候选池"
+          } catch {}
+        }
         if ($body.poolOnly) {
           try {
             $state.queries.Clear()
             Build-JoinQueue | Out-Null
-            Add-Event ("[hub] poolOnly：跳过搜索，直接从候选池加入（池深 " + @(Get-PoolItems $Platform).Count + "）")
+            $state | Add-Member -NotePropertyName poolOnlyOnce -NotePropertyValue $true -Force
+            Add-Event ("[hub] poolOnly：已记录，探针完成后直接进入加入阶段（池深 " + @(Get-PoolItems $Platform).Count + "）")
           } catch { Write-Host ("[hub] poolOnly 失败: " + $_.Exception.Message) }
         }
+      }
+      elseif ($body.action -eq "joinnow") {
+        try {
+          $state.queries.Clear()
+          if ($body.platform) {
+            $want = [string]$body.platform
+            $known = @($cfg.platforms | ForEach-Object { [string]$_ })
+            if ($known -contains $want) { $script:Platform = $want }
+          }
+          Build-JoinQueue | Out-Null
+          $state.phase = "join"
+          $state.running = $true
+          $state.nextAt = Get-Date
+          Add-Event ("[hub] joinnow：直接进入加入阶段（" + $Platform + "，池深 " + @(Get-PoolItems $Platform).Count + "）")
+        } catch { Write-Host ("[hub] joinnow err: " + $_.Exception.Message) }
       }
       elseif ($body.action -eq "stop") { $state.running = $false; $state.phase = "idle"; try { Set-GOpsStop $baseDir ("hub stop " + (Get-Date).ToString("HH:mm:ss")) | Out-Null } catch {}; Write-Host "[hub] stopped" }
       Send-Json $ctx 200 @{ ok = $true; phase = $state.phase }
@@ -1564,8 +1586,21 @@ while ($listener.IsListening) {
 
       if ($kind -eq "probe") {
         if ($r.value) { $state.self = [string]$r.value.self }
-        $state.phase = "search"
-        Write-Host ("[hub] probe ok self=" + $state.self)
+        if ($state.poolOnlyOnce) {
+          $state | Add-Member -NotePropertyName poolOnlyOnce -NotePropertyValue $false -Force
+          $state.phase = "join"
+          $state.nextAt = Get-Date
+          Build-JoinQueue | Out-Null
+          Add-Event "[hub] poolOnly：探针完成，直接进入加入阶段（跳过搜索）"
+          Write-Host ("[hub] probe ok -> join (poolOnly) self=" + $state.self)
+        } else {
+          if ($state.phase -eq "probe") {
+            $state.phase = "search"
+            Write-Host ("[hub] probe ok self=" + $state.self)
+          } else {
+            Write-Host ("[hub] probe ok（保持阶段 " + $state.phase + "）")
+          }
+        }
       }
       elseif ($kind -eq "search") {
         $q = $state.pending.query

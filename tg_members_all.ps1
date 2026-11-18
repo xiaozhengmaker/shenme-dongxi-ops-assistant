@@ -5,6 +5,7 @@
   [int]$GroupSpacingMaxMs = 2600
 )
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\stop.ps1")
 $root = $PSScriptRoot
 $rootDir = $PSScriptRoot
 . (Join-Path $rootDir "lib\feishu.ps1")
