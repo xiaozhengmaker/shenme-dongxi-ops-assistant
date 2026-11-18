@@ -1,0 +1,87 @@
+{
+  "run_id": "wa-round3-202611181935",
+  "at": "2026-11-18T19:32:07",
+  "mode": "search_only",
+  "max_join": 0,
+  "funnel": {
+    "publishers": 3,
+    "unique_invites": 3,
+    "previews_ok": 3,
+    "profile_matching_novel": 2,
+    "public_and_no_approval": 2
+  },
+  "distribution": {
+    "trade": 2,
+    "content_notify": 1,
+    "unknown_purpose": 0
+  },
+  "joined": 0,
+  "approval_requests": 0,
+  "items": [
+    {
+      "publisher": "A7 Skins",
+      "page": "https://a7skins.com.br/",
+      "invite": "E2hUAwnmo1Z3t1Pq7tAvrv",
+      "novelty": "new",
+      "object_type": "group",
+      "name": "A7 Skins - C/V SKINS CS2 #1",
+      "created": "2025-03-10",
+      "approx_members": null,
+      "buttons": [
+        "Read more",
+        "Cancel",
+        "Join group"
+      ],
+      "admission": "open",
+      "community": "A7 Skins #1 (announcement group)",
+      "purpose": "trade",
+      "evidence": "Seja bem-vindo(a) à A7 SKINS – Compra e Venda de Skins CS2!",
+      "verdict": "profile_match_open"
+    },
+    {
+      "publisher": "MarkSkins",
+      "page": "https://markskins.com.br/redes",
+      "invite": "DW43Krd3RUPBV0Z3kzkITv",
+      "novelty": "known",
+      "object_type": "group",
+      "name": "MARK SKINS | Ofertas e Comunidade CS2",
+      "community": "Mark - Skins De CS2",
+      "approx_members": 58,
+      "buttons": [
+        "+58",
+        "Read more",
+        "Cancel",
+        "Request to join"
+      ],
+      "admission": "approval_required",
+      "purpose": "content_notify",
+      "evidence": "GRUPO OFICIAL MARK SKINS | CS2, skins, lives e sorteios!",
+      "verdict": "profile_match_but_approval_and_known"
+    },
+    {
+      "publisher": "RB SKINS",
+      "page": "https://linktr.ee/rbskins_cs2",
+      "invite": "ELqCjojwLgTC0j5gXvJHgX",
+      "novelty": "new",
+      "object_type": "group",
+      "name": "RB Skins Exclusivo #1",
+      "created": "2025-03-11",
+      "approx_members": 37,
+      "buttons": [
+        "+37",
+        "Read more",
+        "Cancel",
+        "Join group"
+      ],
+      "admission": "open",
+      "purpose": "trade",
+      "evidence": "Interesse em algo? Chame algum dos administradores do grupo no privado!",
+      "verdict": "profile_match_open"
+    }
+  ],
+  "notes": [
+    "A7 官网说明其 drop 模拟器仅为展示，未据此把群标为开箱群",
+    "MarkSkins 本轮查的是 /redes，第一轮查首页无邀请的记录保留",
+    "RB 只查 Grupo Exclusivo #1，WhatsApp para Contato (api.whatsapp.com/send?phone=49999526510) 未查"
+  ]
+}
