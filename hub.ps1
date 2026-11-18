@@ -267,7 +267,29 @@ function Merge-IntoPool([string]$pf, $newItems, [string]$source) {
   return @{ added = $added; depth = $n }
 }
 
-function Get-PoolDepth([string]$pf) { return @(Get-PoolItems $pf).Count }
+function Test-PoolItemEligible($item, [string]$pf) {
+  # 单一判定口径：TTL 已由 Get-PoolItems 处理；这里再排除跳过名单与业务相关度
+  if (-not $item) { return $false }
+  $tt = [string]$item.t; if (-not $tt) { $tt = [string]$item.title }
+  if ($pf -eq "Telegram") {
+    $rxRel = '(?i)(cs2|cs:go|csgo|counter[\s\-]?strike)'
+    $rxDrop = '(?i)(hotkey|keybind|keyboard|sensitiv|trainer|coach|custom map|cheat|hack|ban|vac|airdrop|news|sport|football|movie|music|standoff|para1el|ranking|giveaway|rental|casino|poker|новост|анонс|дайджест|подборка)'
+    if ($tt) {
+      if ($tt -notmatch $rxRel) { return $false }
+      if ($tt -match $rxDrop) { return $false }
+    }
+  }
+  $u = ([string]$item.u).Trim().TrimStart("@").ToLower()
+  if ($u -and $state.skipSet -and $state.skipSet.ContainsKey("@" + $u)) { return $false }
+  return $true
+}
+
+function Get-PoolDepth([string]$pf) {
+  # 口径：只数「能用」的候选（未过期 + 过相关度闸门 + 不在跳过名单）
+  return @(@(Get-PoolItems $pf) | Where-Object { Test-PoolItemEligible $_ $pf }).Count
+}
+
+function Get-PoolRawDepth([string]$pf) { return @(Get-PoolItems $pf).Count }
 
 function Load-CandidatePool($pf, $maxAgeHours) {
   # 兼容旧调用：忽略全局 maxAgeHours，统一用逐项 TTL
@@ -321,27 +343,19 @@ function Build-JoinQueue {
   $list = @()
   if ($pooled.Count -gt 0) {
     $list = $pooled
-    Write-Host ("[hub] 队列来源=候选池 存量 " + $pooled.Count)
+    Write-Host ("[hub] 队列来源=候选池 存量 " + $pooled.Count + "（可用 " + (Get-PoolDepth $Platform) + "）")
   } else {
     foreach ($k in $state.candidates.Keys) { $list += $state.candidates[$k] }
     Write-Host ("[hub] 队列来源=本轮搜索 候选 " + @($list).Count)
   }
   $list = $list | Sort-Object { -[int]$_.n }
-  if ($Platform -eq "Telegram" -and @($list).Count -gt 0) {
-    $rxRel = '(?i)(cs2|cs:go|csgo|counter[\s\-]?strike)'
-    $rxDrop = '(?i)(hotkey|keybind|keyboard|sensitiv|trainer|coach|custom map|cheat|hack|ban|vac|airdrop|news|sport|football|movie|music|standoff|para1el|ranking|giveaway|rental|casino|poker|новост|анонс|дайджест|подборка)'
+  if (@($list).Count -gt 0) {
     $b0 = @($list).Count
-    $list = @($list | Where-Object {
-      $tt = [string]$_.t
-      if (-not $tt) { $tt = [string]$_.title }
-      if ($tt) {
-        if ($tt -notmatch $rxRel) { return $false }
-        if ($tt -match $rxDrop) { return $false }
-      }
-      return $true
-    })
-    Write-Host ("[hub] 池内相关性过滤 " + $b0 + " -> " + @($list).Count)
-    Add-Event ("池内相关性过滤 " + $b0 + " -> " + @($list).Count)
+    $list = @($list | Where-Object { Test-PoolItemEligible $_ $Platform })
+    if ($b0 -ne @($list).Count) {
+      Write-Host ("[hub] 池内过滤 " + $b0 + " -> " + @($list).Count + "（过期/相关度/跳过名单）")
+      Add-Event ("池内过滤 " + $b0 + " -> " + @($list).Count)
+    }
   }
   # 二重保险：候选池/搜索结果里若含跳过名单内的群，这里再剔一次
   $list = @($list | Where-Object {
@@ -1315,19 +1329,18 @@ while ($listener.IsListening) {
       foreach ($pf2 in @(@{ p = "Telegram"; days = 7 }, @{ p = "Facebook"; days = 14 })) {
         $plat = $pf2.p; $dd = $pf2.days
         $qv = 0; try { $qv = [int]$cfg.quotas.$plat } catch { }
+        # 水位口径：只数「能用」的（未过期 + 过相关度闸门 + 不在跳过名单）；raw 仅作诊断
+        $lvlRaw = 0
+        try { $lvlRaw = Get-PoolRawDepth $plat } catch { $lvlRaw = 0 }
         $lvl = 0
-        $poolFile = Join-Path $poolDir ("pool_" + $plat.ToLower() + ".json")
-        if (Test-Path $poolFile) {
-          try { $pj = [System.IO.File]::ReadAllText($poolFile, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
-                $lvl = @($pj.items).Count } catch { }
-        }
+        try { $lvl = Get-PoolDepth $plat } catch { $lvl = 0 }
         $safe = $qv * $dd
         $days = if ($qv -gt 0) { [Math]::Round($lvl / $qv, 1) } else { $null }
         $st = "red"
         if ($days -ne $null) {
           if ($days -ge $dd) { $st = "green" } elseif ($days -ge 3) { $st = "amber" }
         }
-        $items += @{ platform = $plat; type = "supply"; level = $lvl; safe = $safe; quota = $qv; days = $days; status = $st }
+        $items += @{ platform = $plat; type = "supply"; level = $lvl; level_raw = $lvlRaw; safe = $safe; quota = $qv; days = $days; status = $st }
       }
       $items += @{ platform = "WhatsApp"; type = "off"; level = 0; safe = 0; status = "off"; label = "已停用" }
 
@@ -1560,7 +1573,7 @@ while ($listener.IsListening) {
     }
         $q = $state.queries.Dequeue()
         $id = Next-TaskId
-        $state.pending = @{ kind = "search"; id = $id; query = $q }
+        $state.pending = @{ kind = "search"; id = $id; query = $q; t0 = (Get-Date) }
         $state.current = "搜索：" + $q
         Send-Json $ctx 200 @{ action = "search"; platform = $Platform; id = $id; query = $q; limit = 30 }
         Start-Sleep -Milliseconds (Rand-Int 3 8 * 100)
@@ -1641,7 +1654,36 @@ while ($listener.IsListening) {
         }
         $rawN = @($r.value).Count
         Write-Host ("[hub] search '$q' raw=$rawN new=$cnt min=$($state.minNow) seen=$($seen.Count)")
+function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [string]$reason) {
+  try {
+    $dir = Join-Path (Split-Path $PSScriptRoot -Parent) "data"
+    if (-not (Test-Path $dir)) { return }
+    $row = [ordered]@{
+      ts        = (Get-Date).ToString("s")
+      platform  = $pf
+      source_id = "keyword_search"
+      query     = $query
+      raw       = [int]$fn.unique
+      eligible  = [int]$fn.eligible
+      joined    = [int]$fn.joined
+      pending   = [int]$fn.pending
+      small     = [int]$fn.small
+      offtopic  = [int]$fn.offtopic
+      dup       = [int]$fn.dedup
+      priv      = [int]$fn.priv
+      excluded  = [int]$fn.excluded
+      cost_ms   = $costMs
+      reason    = $reason
+    }
+    $line = ($row | ConvertTo-Json -Compress)
+    Add-Content -Path (Join-Path $dir "source_ledger.jsonl") -Value $line -Encoding UTF8
+  } catch { }
+}
+
         Write-Host ("[hub] funnel " + $Platform + " unique=" + $fn.unique + " eligible=" + $fn.eligible + " joined=" + $fn.joined + " pending=" + $fn.pending + " unknown=" + $fn.unknown + " small=" + $fn.small + " offtopic=" + $fn.offtopic + " dedup=" + $fn.dedup + " priv=" + $fn.priv + " excluded=" + $fn.excluded)
+        $costMs = 0
+        if ($state.pending -and $state.pending.t0) { $costMs = [int]((Get-Date) - $state.pending.t0).TotalMilliseconds }
+        Add-SourceLedger $Platform $q $fn $costMs "search"
         if ($rawN -gt 0 -and $cnt -eq 0) {
           $s0 = @($r.value)[0]
           Write-Host ("[hub] sample raw: n=" + $s0.n + " t=" + $s0.title + " bc=" + $s0.bc)

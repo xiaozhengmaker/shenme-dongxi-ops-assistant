@@ -27,7 +27,7 @@ function Get-QuerySeeds([string]$type, [string[]]$langs) {
   $en = switch ($type) {
     "case_opening" { @("case opening", "unboxed", "keys", "trade", "float") }
     "trading"      { @("trade", "float", "tradeup") }
-    default        { @("cs2", "trade") }
+    default        { @() }   # 解析不出意图就返回空，由调用方报 profile_incomplete，不静默套 CS2
   }
   $local = @()
   if ($langs -match "ru") { $local += "кс2 кейсы" }

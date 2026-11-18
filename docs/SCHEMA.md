@@ -1,4 +1,4 @@
-# 数据表结构（飞书多维表格）
+﻿# 数据表结构（飞书多维表格）
 
 表名：**私域社群表**　共 21 列。前 19 列由程序写入，最后 2 列留给人。
 
@@ -41,3 +41,26 @@
 2. 把单选列的选项一次性建好；
 3. 把 `base_app_token`、`table_id` 填进 `config.json`；
 4. 用 `lib/feishu.ps1` 的 `Add-FsRecords` 先写一条测试记录验证。
+
+## 字段口径补充（2026-11-18）
+
+### `语言`
+- 来源：平台侧（TG `user.lang_code`、FB/Reddit 页面推断）；Steam 无此概念，恒为空。
+- **展示策略**：`/api/users` 已用 `Select-Object -Property * -ExcludeProperty "语言"` 从返回体里剔除，前端不再出现该列；CSV 保留列位（导出仍需兼容旧模板）但值多为空。
+- 为什么不全量回填：Steam 占样本 66%，回填也无意义；TG 的 `lang_code` 覆盖率本身不稳定。
+
+### `最近活跃`
+- 来源：只有 TG 的 `user.status`（`was_online` 秒级时间戳）能稳定拿到；FB 只能拿到「最后互动」的近似值，Reddit 靠帖子时间反推，Steam 完全没有。
+- **展示策略**：拿不到时统一填 `-`（不再留空白）。`users.csv` 已把 84,872 行空值改写为 `-`。
+- 注意：`-` 表示「未知」，不等于「很久没活跃」；做活跃度评分时必须当 `None` 处理（`score_engine.py` 的 `activity=None` 就是这条）。
+
+### `用户ID`
+- Steam = `steamID64`（17 位数字，不可转 int32）
+- Telegram = 数字 uid（可能 9–10 位）
+- Reddit = 用户名（`whitelist` 之外无数字 ID）
+- **Facebook 曾带 `id` 前缀**（`id61584550730266`），2026-11-18 已统一去掉，CSV 与 DB 各修 213 行；对账脚本 `tools/recon_db_csv.py` 现为 `only_db=0 / only_csv=0`。
+- Discord 不采集成员（仅覆盖统计），故 `users` 表无 Discord 行。
+
+### `profile_url`
+- 不入库、不落 CSV，由 `hub.ps1` 的 `Get-ProfileUrl()` 在返回时实时拼接：
+  `Steam → steamcommunity.com/profiles/<id>`、`Telegram → t.me/<username>`、`Reddit → reddit.com/user/<name>`、`Facebook → facebook.com/profile.php?id=<id>`。
