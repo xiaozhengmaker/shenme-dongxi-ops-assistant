@@ -133,5 +133,9 @@
     "budget": 50,
     "persist": true,
     "min_members": 300
+  },
+  "naming": {
+    "enabled": true,
+    "from_receipt": true
   }
 }

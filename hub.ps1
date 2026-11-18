@@ -43,6 +43,8 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 
 . (Join-Path $here "lib\ai.ps1")
+. (Join-Path $here "lib\naming.ps1")
+$script:receiptNames = @{}
 
 
 
@@ -3252,6 +3254,7 @@ while ($listener.IsListening) {
 
 
         alias_shadow = $ashInfo;
+        naming = (Get-NamingStats);
         resume = (Get-ResumeLive);
 
 
@@ -6549,7 +6552,7 @@ while ($listener.IsListening) {
 
 
 
-                              title = $c.title; n = $c.n; self = $state.self; q = $c.q; recentDays = $rd;
+                              title = $(if ([string]$c.title) { [string]$c.title } else { [string]$c.t }); n = $c.n; self = $state.self; q = $c.q; recentDays = $rd;
 
 
 
@@ -7129,7 +7132,19 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
-          if ($tgt) { Write-JoinRecord $tgt $v | Out-Null }
+          if ($tgt) {
+            try {
+              $nmOn = $true; try { if ($null -ne $cfg.naming.enabled) { $nmOn = [bool]$cfg.naming.enabled } } catch { }
+              $useRc = $true; try { if ($null -ne $cfg.naming.from_receipt) { $useRc = [bool]$cfg.naming.from_receipt } } catch { }
+              if ($nmOn) {
+                $nm = Resolve-JoinName $tgt $script:receiptNames $useRc
+                if ($nm.name) { $tgt.title = $nm.name }
+                if ([string]$tgt.id) { $script:receiptNames[[string]$tgt.id] = [string]$nm.name }
+                if ([string]$tgt.u) { $script:receiptNames[[string]$tgt.u] = [string]$nm.name }
+              }
+            } catch { }
+            Write-JoinRecord $tgt $v | Out-Null
+          }
 
 
 
