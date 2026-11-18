@@ -1,0 +1,44 @@
+{
+  "run_id": "wa-pilot-20261118191933",
+  "mode": "search_only",
+  "budget": {
+    "max_sources": 5,
+    "max_previews": 5,
+    "minutes": 20
+  },
+  "sources_checked": 2,
+  "sources": [
+    {
+      "page": "https://markskins.com.br/",
+      "publisher": "MARK SKINS",
+      "status": "checked",
+      "http": 200,
+      "wa_mentions": 0,
+      "invites": 0
+    },
+    {
+      "page": "https://markskins.com/",
+      "publisher": "MARK SKINS (alt)",
+      "status": "error",
+      "error": "connection_closed",
+      "invites": 0
+    }
+  ],
+  "existing_enriched": 0,
+  "source_unknown_local": {
+    "candidates": 3,
+    "screen_rows": 40
+  },
+  "new_invites_with_source": 0,
+  "previews": 0,
+  "preview_states": {},
+  "topic_verified": 0,
+  "public_admission": 0,
+  "enriched_existing": 0,
+  "elapsed_sec": 0.2,
+  "joined": 0,
+  "approval_requests": 0,
+  "outcome": "no_trusted_source",
+  "note": "现有 7 条平台=WhatsApp 的飞书记录实为 Telegram（键 TG-*/链接 t.me），WA 真实存量=0；3 条候选码与 40 条筛检记录均无发布出处，按规则不消耗预览预算。",
+  "next_step": "缺来源：需补充可核查的发布方页面（本地已知仅 markskins.com.br，当前无 WA 邀请）。"
+}
