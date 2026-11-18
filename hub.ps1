@@ -342,6 +342,35 @@ if ($QuotaOverride -gt 0) { $need = $QuotaOverride }
 
 
 
+function Get-ResumeLive {
+  $ri = @{ enabled = $true; budget = 0; targets = 0; sent = 0; sent_total = 0; done = 0;
+           terminated = 0; pending = 0; retry_due = 0; send_unknown = 0;
+           reconcile_ok = $false; last_run = ""; last_at = ""; last_report = "" }
+  try {
+    $rc = Get-Content (Join-Path $here "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($null -ne $rc.resume.enabled) { $ri.enabled = [bool]$rc.resume.enabled }
+    if ($rc.resume.budget) { $ri.budget = [int]$rc.resume.budget }
+    $rp = Join-Path $here "data\tg_recovery_state.json"
+    if (Test-Path $rp) {
+      $rs = Get-Content $rp -Raw -Encoding UTF8 | ConvertFrom-Json
+      $ri.targets = @($rs.targets).Count
+      $ri.sent = [int]$rs.sent
+      $ri.sent_total = [int]$rs.sent_total
+      $ri.done = @($rs.targets | Where-Object { $_.status -eq "done" }).Count
+      $ri.terminated = @($rs.targets | Where-Object { $_.status -eq "terminated" }).Count
+      $ri.pending = @($rs.targets | Where-Object { $_.status -eq "pending" }).Count
+      $ri.retry_due = @($rs.targets | Where-Object { $_.status -eq "retry_due" }).Count
+      $ri.send_unknown = @($rs.targets | Where-Object { $_.status -eq "send_unknown" }).Count
+      $ri.reconcile_ok = (($ri.done + $ri.terminated + $ri.pending + $ri.retry_due + $ri.send_unknown) -eq $ri.targets)
+      $ri.last_run = [string]$rs.resume_run
+      $ri.last_at = [string]$rs.at
+    }
+    $lr = Get-ChildItem (Join-Path $here "data") -Filter "tg_recovery_*.json" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($lr) { $ri.last_report = $lr.Name }
+  } catch { }
+  return $ri
+}
+
 function Now-Unix { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
 
 
@@ -3205,6 +3234,8 @@ while ($listener.IsListening) {
 
 
         alias_shadow = $ashInfo;
+        resume = (Get-ResumeLive);
+
 
 
 

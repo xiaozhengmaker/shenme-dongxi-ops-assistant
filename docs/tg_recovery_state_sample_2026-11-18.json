@@ -1,0 +1,468 @@
+{
+    "original_run":  "run-20261118171936",
+    "resume_run":  "resume-20261118180535",
+    "budget":  50,
+    "sent":  1,
+    "sent_total":  52,
+    "targets":  [
+                    {
+                        "u":  "beseda_fayzik",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "9001",
+                        "err":  "FLOOD_WAIT_67649",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "retakenews",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "9001",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "prefectvpn_support",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "9002",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "donldjohntrump",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "9003",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "radnoy",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "9004",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "mestchannel",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "9005",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "razer_vpn_bot",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "9006",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "rubup",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "9007",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "langameesports",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "9008",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "evkeev",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "9009",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "tahouz",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90010",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "jurvusw",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90011",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "giveaway_cs2",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90012",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "cs_shot_bot",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90013",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "arimaxshopbackup",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90014",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "ytmest",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90015",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "rushsite",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90016",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "sendjarv",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90017",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "jaruvu",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90018",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "aaaaaerz9l5jld6_7ii4oq",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90019",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "mamurovv_077",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90020",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "ari_max",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90021",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "as1nogogo",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90022",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "neffeks",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90023",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "sigmasend",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90024",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "metabro",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90025",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "juruvus",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90026",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "gigapust",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90027",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "shansino_app",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90028",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "cs2news_uk",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90029",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "work5d",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90030",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "skinsincs2",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90031",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "hamster_trade228",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90032",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "mahdi_leet",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90033",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "vannyanc",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90034",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "zahar_kcaltotamovihc",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90035",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "moonlighter_shop_bot",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90036",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "iks_romano",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90037",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "ziozioi",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90038",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "swin34",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90039",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "+_zrckpxopqphmgfi",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90040",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "kitsunemim",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90041",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "cs_2_mrkt",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90042",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "yaruks1mpled1mple",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90043",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "gumfv",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90044",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "pomotomi",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90045",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "vor_moshennik_tuneyadec",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90046",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "skardlx",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90047",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "tt_0oo",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90048",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "ir_store_gp",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90049",
+                        "err":  "",
+                        "at":  ""
+                    },
+                    {
+                        "u":  "chief1488",
+                        "status":  "done",
+                        "verdict":  "dup",
+                        "n":  500,
+                        "peer_id":  "90050",
+                        "err":  "",
+                        "at":  ""
+                    }
+                ]
+}

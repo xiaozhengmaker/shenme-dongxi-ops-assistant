@@ -128,18 +128,10 @@
       "csgo trade"
     ]
   },
-  "rejects": {
+  "resume": {
     "enabled": true,
-    "ttl_days": 14
-  },
-  "flood": {
-    "enabled": true,
+    "budget": 50,
     "persist": true,
-    "show_in_live": true
-  },
-  "alias_shadow": {
-    "enabled": false,
-    "mode": "off",
-    "file": "data/tg_alias_shadow.jsonl"
+    "min_members": 300
   }
 }
