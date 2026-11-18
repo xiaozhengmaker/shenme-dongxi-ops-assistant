@@ -349,9 +349,16 @@ function Build-JoinQueue {
     -not ($_.u -and $state.skipSet -and $state.skipSet.ContainsKey($uk2))
   })
   # 既无 username 又无 access_hash 的候选无法可靠加入（老候选池 schema），直接剔除
-  $before = $list.Count
-  $list = @($list | Where-Object { ([string]$_.u).Trim() -ne "" -or ([string]$_.h).Trim() -ne "" })
-  if ($before -ne $list.Count) { Write-Host ("[hub] 剔除无法加入的候选 " + ($before - $list.Count) + " 个（无 u/h）") }
+  # 注意：Facebook 的加入靠 numeric id + 标题匹配，本来就没有 username/access_hash，不能套用这条
+  if ($Platform -eq "Telegram") {
+    $before = $list.Count
+    $list = @($list | Where-Object { ([string]$_.u).Trim() -ne "" -or ([string]$_.h).Trim() -ne "" })
+    if ($before -ne $list.Count) { Write-Host ("[hub] 剔除无法加入的候选 " + ($before - $list.Count) + " 个（无 u/h）") }
+  } elseif ($Platform -eq "Facebook") {
+    $before = $list.Count
+    $list = @($list | Where-Object { ([string]$_.id).Trim() -ne "" -or ([string]$_.title).Trim() -ne "" })
+    if ($before -ne $list.Count) { Write-Host ("[hub] 剔除无 id/title 的 FB 候选 " + ($before - $list.Count) + " 个") }
+  }
   $take = [Math]::Min($need, $list.Count)
   $i = 0
   foreach ($c in $list) {
@@ -1480,6 +1487,14 @@ while ($listener.IsListening) {
           continue
         }
         Write-Host (Start-Run)
+        # poolOnly：跳过关键词搜索，直接用候选池建队列（用于「池里已经有钱，先花掉」）
+        if ($body.poolOnly) {
+          try {
+            $state.queries.Clear()
+            Build-JoinQueue | Out-Null
+            Add-Event ("[hub] poolOnly：跳过搜索，直接从候选池加入（池深 " + @(Get-PoolItems $Platform).Count + "）")
+          } catch { Write-Host ("[hub] poolOnly 失败: " + $_.Exception.Message) }
+        }
       }
       elseif ($body.action -eq "stop") { $state.running = $false; $state.phase = "idle"; try { Set-GOpsStop $baseDir ("hub stop " + (Get-Date).ToString("HH:mm:ss")) | Out-Null } catch {}; Write-Host "[hub] stopped" }
       Send-Json $ctx 200 @{ ok = $true; phase = $state.phase }

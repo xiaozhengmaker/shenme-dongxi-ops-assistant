@@ -1,4 +1,4 @@
-﻿// background.js —— 调度循环：向本地 hub 取任务 → 在页面里执行 → 回传结果
+// background.js —— 调度循环：向本地 hub 取任务 → 在页面里执行 → 回传结果
 const HUB = "http://127.0.0.1:8787";
 let timer = null;
 let busy = false;
@@ -12,8 +12,14 @@ async function getState() {
 async function setState(patch) { await chrome.storage.local.set(patch); }
 
 async function hubFetch(path, opts) {
-  const res = await fetch(HUB + path, Object.assign({ cache: "no-store" }, opts || {}));
-  return res;
+  const ac = new AbortController();
+  const timer = setTimeout(() => { try { ac.abort(); } catch (e) {} }, 12000);
+  try {
+    const res = await fetch(HUB + path, Object.assign({ cache: "no-store", signal: ac.signal }, opts || {}));
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function findTab(platform) {
@@ -139,6 +145,7 @@ function pageJoin(p) {
 
 // —— 主循环 ——
 async function tick() {
+  tick.fails = tick.fails || 0;
   if (busy) return;
   busy = true;
   try {
@@ -187,10 +194,22 @@ async function tick() {
 
     if (task.action === "search") {
       if (String(task.platform || "").toLowerCase() === "facebook") {
-        const url = "https://www.facebook.com/search/groups/?q=" + encodeURIComponent(task.query);
+        const qenc = encodeURIComponent(task.query);
+        const url = "https://www.facebook.com/search/groups/?q=" + qenc;
         await chrome.tabs.update(tab.id, { url });
         await waitTab(tab.id, 20000);
-        await sleep(3500);
+        // FB 的搜索结果页是 SPA：仅改 URL 不会重新发查询，必须整页硬刷新
+        try { await chrome.tabs.reload(tab.id, { bypassCache: true }); } catch (e) {}
+        await waitTab(tab.id, 25000);
+        await sleep(1500);
+        // 等 URL 真的带上本次关键词（SPA 会先渲染上一个查询的结果，导致「每次 raw 都一样」）
+        for (let w = 0; w < 12; w++) {
+          await sleep(700);
+          let cur = "";
+          try { const tb = await chrome.tabs.get(tab.id); cur = decodeURIComponent(tb.url || ""); } catch (e) {}
+          if (cur.indexOf(task.query) >= 0) { break; }
+        }
+        await sleep(2800);
         await injectAndWait(tab.id, pageFBFilter, []).catch(function(){});
         await sleep(1200);
         await injectAndWait(tab.id, pageFBExtract, [{ scroll: 3 }], 45000);
@@ -214,6 +233,11 @@ async function tick() {
           await chrome.tabs.update(tab.id, { url: "https://www.facebook.com/search/groups/?q=" + encodeURIComponent(task.q) });
           await waitTab(tab.id, 20000);
           await sleep(5000);
+        } else {
+          // 池化直加的候选来自「发现页」，必须先回到发现页再找卡片，否则注定 not_found
+          await chrome.tabs.update(tab.id, { url: "https://www.facebook.com/groups/discover/" });
+          await waitTab(tab.id, 25000);
+          await sleep(4500);
         }
         await injectAndWait(tab.id, pageFBJoin, [{ id: task.chatId, title: task.title }]);
       } else {
@@ -527,11 +551,11 @@ async function pageFBExtract(arg) {
     if (seen[k]) continue;
     seen[k] = 1;
     let el = a, card = null;
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 10; i++) {
       el = el.parentElement; if (!el) break;
       const t = el.innerText || "";
-      const btns = [...el.querySelectorAll('div[role="button"]')].map(b => (b.innerText || "").trim()).filter(Boolean);
-      if (t.length > 20 && btns.length > 0 && btns.length < 8) { card = el; break; }
+      // 不再依赖 role=button（FB 现在把「访问」渲染成 <a>），只要求卡片里带成员数
+      if (t.length > 20 && /(位?成员|members)/i.test(t) && t.length < 1200) { card = el; break; }
     }
     if (!card) continue;
     const txt = card.innerText || "";
@@ -544,9 +568,9 @@ async function pageFBExtract(arg) {
       if (u === "万") n *= 10000; else if (u === "亿") n *= 1e8;
       else if (u === "K") n *= 1000; else if (u === "M") n *= 1e6;
     }
-    const btns = [...card.querySelectorAll('div[role="button"]')].map(b => (b.innerText || "").trim());
-    const joinable = btns.some(t => t === "加入" || t === "Join" || t === "加入小组");
-    const joined = btns.some(t => t === "访问" || t === "已加入" || t === "View" || t === "已申请");
+    const bt = card.innerText || "";
+    const joinable = /(^|\n)\s*(加入|Join|加入小组)\s*($|\n)/.test(bt);
+    const joined = /(^|\n)\s*(访问|已加入|View|已申请|Joined)\s*($|\n)/.test(bt);
     out.push({ id: k, u: "", title: name, n: Math.round(n || 0), bc: joined, joinable, priv: /非公开/.test(txt) });
   }
   window.__dshRes = JSON.stringify({ ok: true, v: out });
@@ -571,55 +595,70 @@ function pageFBFilter() {
 // 点某个群的「加入」，2.6 秒后判断结果
 function pageFBJoin(arg) {
   const done = (v, e) => { window.__dshRes = JSON.stringify({ ok: v !== "err", v, e: e || "" }); };
-  const want = arg.id;
-  const label = b => (b.innerText || "").trim();
+  const want = String(arg.id || "");
+  const label = b => (b.innerText || "").replace(/\s+/g, " ").trim();
+  const clickables = root => [...root.querySelectorAll('a, div[role="button"], span[role="button"]')];
   let tries = 0;
 
   const findCard = () => {
     const as = [...document.querySelectorAll('a[href*="/groups/"]')];
     for (const a of as) {
       const h = a.getAttribute("href") || "";
-      if (h.indexOf("/groups/" + want) === -1) continue;
+      if (!want || h.indexOf("/groups/" + want) === -1) continue;
       let el = a, card = null;
-      for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 10; i++) {
         el = el.parentElement; if (!el) break;
         const tx = el.innerText || "";
-        const btns = [...el.querySelectorAll('div[role="button"]')];
-        if (tx.length > 20 && btns.length > 0 && btns.length < 8) { card = el; break; }
+        if (tx.length > 20 && tx.length < 800 && /(位成员|members)/i.test(tx)) { card = el; break; }
       }
       if (card) return card;
     }
     return null;
   };
 
+  const findJoin = card => {
+    let box = card;
+    for (let k = 0; k < 6; k++) {
+      const j = clickables(box).find(b => /^(加入小组|加入|Join group|Join)$/i.test(label(b)));
+      if (j) return j;
+      if (!box.parentElement) break;
+      box = box.parentElement;
+    }
+    return null;
+  };
+
+  let tops = 0;
   const step = () => {
-    const target = findCard();
-    if (!target) {
+    const card = findCard();
+    if (!card) {
       tries++;
-      if (tries > 7) { done("not_found", "card_not_found"); return; }
+      if (tries === 1) { window.scrollTo(0, 0); setTimeout(step, 700); return; }
+      if (tries > 8) {
+        if (tops < 1) { tops++; tries = 0; window.scrollTo(0, 0); setTimeout(step, 900); return; }
+        done("not_found", "card_not_found:" + want); return;
+      }
       window.scrollBy(0, 700);
       setTimeout(step, 900);
       return;
     }
-    const cardText = target.innerText || "";
-    if (/非公开/.test(cardText)) { done("approval", "private_group"); return; }
-    const btns = [...target.querySelectorAll('div[role="button"]')];
-    const joinBtn = btns.find(b => ["加入", "Join", "加入小组"].includes(label(b)));
-    if (!joinBtn) {
-      const j = btns.find(b => ["访问", "已加入", "View"].includes(label(b)));
-      done(j ? "already" : "not_found", j ? "" : "no_join_button");
+    const txt = card.innerText || "";
+    if (/非公开|Private group/.test(txt)) { done("approval", "private_group"); return; }
+    const jb = findJoin(card);
+    if (!jb) {
+      const boxText = ((card.parentElement && card.parentElement.innerText) || "") + " " + txt;
+      done(/已加入|Joined|访问|Visit/.test(boxText) ? "already" : "not_found", "no_join_button");
       return;
     }
-    joinBtn.click();
-    setTimeout(() => {
-      const now = [...target.querySelectorAll('div[role="button"]')].map(label);
-      const bodyTxt = document.body.innerText || "";
-      if (now.some(t => ["待审核", "已申请", "取消请求", "已发送请求"].includes(t))) { done("request_sent"); return; }
-      if (now.some(t => ["访问", "已加入", "View"].includes(t))) { done("joined"); return; }
-      if (/回答.*问题|入群问题|填写.*答案|必须回答/.test(bodyTxt)) { done("request_sent", "needs_answers"); return; }
-      if (now.some(t => ["加入", "Join"].includes(t))) { done("err", "still_join"); return; }
-      done("joined");
-    }, 2600);
+    try { jb.click(); } catch (e) { done("err", "click_failed"); return; }
+    let wait = 0;
+    const verify = () => {
+      wait++;
+      const now = ((card.innerText || "") + " " + ((card.parentElement && card.parentElement.innerText) || ""));
+      if (/已加入|Joined|已申请|取消申请|访问|Visit/.test(now)) { done("joined", ""); return; }
+      if (wait > 10) { done("pending", "no_state_change"); return; }
+      setTimeout(verify, 800);
+    };
+    setTimeout(verify, 1400);
   };
 
   step();
