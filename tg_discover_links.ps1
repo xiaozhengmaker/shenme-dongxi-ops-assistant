@@ -313,7 +313,7 @@ $jsResolve = @'
 
       out.items.push({ u: u, t: ch.title || "", n: n, bc: !!ch.broadcast, jr: jr, id: String(ch.id), h: String(ch.access_hash || ""), k: (ch._ === "channel" ? "channel" : "chat") });
 
-    } catch (e) { out.items.push({ u: u, miss: 1 }); }
+    } catch (e) { out.items.push({ u: u, miss: 1, err: String((e && (e.error_message || e.message)) || e || "").slice(0, 160) }); }
 
   }
 
@@ -324,6 +324,20 @@ $jsResolve = @'
 '@
 
 
+
+if (-not $DryRun) {
+  $snapId = "run-" + (([string]$st.startedAt) -replace "[^0-9]", "")
+  $snapDir = Join-Path $baseDir "data"
+  $snapFile = Join-Path $snapDir ("tg_links_snapshot_" + $snapId + ".json")
+  $snapObj = @{
+    run_id = $snapId
+    taken_at = (Get-Date).ToString("s")
+    count = @($st.links.Keys).Count
+    links = @($st.links.GetEnumerator() | Sort-Object Value -Descending | ForEach-Object { @{ u = [string]$_.Key; hits = [int]$_.Value } })
+  }
+  [System.IO.File]::WriteAllText($snapFile, ($snapObj | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding($false)))
+  Write-Log ("快照落盘 " + $snapObj.count + " 条 -> " + $snapFile) "INFO"
+}
 
 $resolvedNames = @{}
 
@@ -425,6 +439,7 @@ foreach ($r in @($st.resolved)) {
       $rejects += [pscustomobject]@{
         run_id = $runId; u = $uMiss; id = ""; n = 0; t = ""; h = ""; k = ""
         bc = $false; jr = $false; topic_ok = $false; hits = [int]$st.links[$uMiss]
+        err = [string]$r.err
         reasons = @("resolve_failed"); effective_min = $MinMembers; compare_min = $CompareMin
         at = (Get-Date).ToString("s")
       }
