@@ -301,6 +301,7 @@ function Start-Run {
   $state.running = $true
   $state.self = ""
   $state.candidates = @{}
+  $state.ledgerLast = $null
   $state.queue = New-Object System.Collections.Queue
   $state.queries = New-Object System.Collections.Queue
   $state.fails = 0
@@ -1656,7 +1657,7 @@ while ($listener.IsListening) {
         Write-Host ("[hub] search '$q' raw=$rawN new=$cnt min=$($state.minNow) seen=$($seen.Count)")
 function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [string]$reason) {
   try {
-    $dir = Join-Path (Split-Path $PSScriptRoot -Parent) "data"
+    $dir = Join-Path $PSScriptRoot "data"
     if (-not (Test-Path $dir)) { return }
     $row = [ordered]@{
       ts        = (Get-Date).ToString("s")
@@ -1683,7 +1684,20 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
         Write-Host ("[hub] funnel " + $Platform + " unique=" + $fn.unique + " eligible=" + $fn.eligible + " joined=" + $fn.joined + " pending=" + $fn.pending + " unknown=" + $fn.unknown + " small=" + $fn.small + " offtopic=" + $fn.offtopic + " dedup=" + $fn.dedup + " priv=" + $fn.priv + " excluded=" + $fn.excluded)
         $costMs = 0
         if ($state.pending -and $state.pending.t0) { $costMs = [int]((Get-Date) - $state.pending.t0).TotalMilliseconds }
-        Add-SourceLedger $Platform $q $fn $costMs "search"
+        # 账本记「本次查询的增量」，不是运行累计（funnel 是累计的）
+        $keys = @("unique","eligible","joined","pending","small","offtopic","dedup","priv","excluded")
+        if (-not $state.ledgerLast) {
+          $state.ledgerLast = @{}
+          foreach ($k in $keys) { $state.ledgerLast[$k] = 0 }
+        }
+        $delta = @{}
+        foreach ($k in $keys) {
+          $d = [int]$fn[$k] - [int]$state.ledgerLast[$k]
+          if ($d -lt 0) { $d = [int]$fn[$k] }
+          $delta[$k] = $d
+        }
+        Add-SourceLedger $Platform $q $delta $costMs "search"
+        foreach ($k in $keys) { $state.ledgerLast[$k] = [int]$fn[$k] }
         if ($rawN -gt 0 -and $cnt -eq 0) {
           $s0 = @($r.value)[0]
           Write-Host ("[hub] sample raw: n=" + $s0.n + " t=" + $s0.title + " bc=" + $s0.bc)
