@@ -494,7 +494,9 @@ function Get-UsersPayload([hashtable]$q) {
     $items = @($slice | ForEach-Object {
       $o = $_
       $pu = Get-ProfileUrl ([string]$o.'平台') ([string]$o.'用户ID') ([string]$o.'用户名')
-      $o | Add-Member -NotePropertyName "profile_url" -NotePropertyValue $pu -Force
+      # 「语言」字段 99% 为空，按用户决定不在接口里返回（隐藏该列）
+    $o = $o | Select-Object -Property * -ExcludeProperty "语言"
+    $o | Add-Member -NotePropertyName "profile_url" -NotePropertyValue $pu -Force
       $o
     })
   }
