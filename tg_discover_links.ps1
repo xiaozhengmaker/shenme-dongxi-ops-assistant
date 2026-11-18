@@ -15,6 +15,8 @@ param(
   [int]$BatchGroups = 15,
 
   [int]$BatchResolve = 20,
+  [int]$CompareMin = 150,
+  [switch]$NoRejects,
 
   [int]$TimeBudgetSec = 240,
 
@@ -383,29 +385,132 @@ if (Test-Path $jsonPath) {
 
 
 
-$new = @()
+# ---------- 阶段四：双门槛测量 + rejects 落盘 ----------
+$runId = "run-" + (([string]$st.startedAt) -replace "[^0-9]", "")
+if (-not $runId -or $runId.Length -lt 10) { $runId = "run-" + (Get-Date -Format "yyyyMMddHHmmss") }
 
-foreach ($r in @($st.resolved)) {
+$rxTopic = '(?i)(cs2|cs:go|csgo|counter[\s\-]?strike|cs\s?1\.6|cs1\.6)'
+$rxBad = ''
+$rejectsOn = $true
+try {
+  $cfgm = Get-Content (Join-Path $baseDir "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ($cfgm.strategy.Telegram.filters.exclude_regex) { $rxBad = [string]$cfgm.strategy.Telegram.filters.exclude_regex }
+  if ($cfgm.rejects -and ($cfgm.rejects.enabled -eq $false)) { $rejectsOn = $false }
+} catch { }
+if ($NoRejects) { $rejectsOn = $false }
 
-  if ($r.miss) { continue }
-
-  $u = ([string]$r.u).ToLower()
-
-  if (-not $u) { continue }
-
-  if ($known.ContainsKey($u)) { continue }
-
-  if ([int]$r.n -lt $MinMembers) { continue }
-
-  if ($r.bc) { continue }
-
-  $new += [pscustomobject]@{ u = $u; n = [int]$r.n; t = [string]$r.t; h = [string]$r.h; k = [string]$r.k; id = [string]$r.id; hits = [int]$st.links[$u] }
-
+# 已有库存（本轮开始前的池 + 已知名单）
+$poolKeys = @{}
+$poolPath0 = Join-Path $baseDir "data\pool_telegram.json"
+if (Test-Path $poolPath0) {
+  try {
+    foreach ($it in @((Get-Content $poolPath0 -Raw -Encoding UTF8 | ConvertFrom-Json).items)) {
+      if ($it.u) { $poolKeys[([string]$it.u).ToLower()] = 1 }
+      if ($it.id) { $poolKeys[[string]$it.id] = 1 }
+    }
+  } catch { }
 }
 
+$measureDir = Join-Path $baseDir "data\tg_measure"
+if (-not (Test-Path $measureDir)) { New-Item -ItemType Directory -Path $measureDir -Force | Out-Null }
+
+$cand300 = @(); $cand150 = @(); $diff = @(); $rejects = @()
+$stCount = [ordered]@{ resolved = 0; miss = 0; dup = 0; topic_fail = 0; bad = 0; bc = 0; join_req = 0; n_lt_150 = 0; unknown_n = 0 }
+
+foreach ($r in @($st.resolved)) {
+  if ($r.miss) {
+    $stCount.miss++
+    if ($rejectsOn) {
+      $uMiss = ([string]$r.u).ToLower()
+      $rejects += [pscustomobject]@{
+        run_id = $runId; u = $uMiss; id = ""; n = 0; t = ""; h = ""; k = ""
+        bc = $false; jr = $false; topic_ok = $false; hits = [int]$st.links[$uMiss]
+        reasons = @("resolve_failed"); effective_min = $MinMembers; compare_min = $CompareMin
+        at = (Get-Date).ToString("s")
+      }
+    }
+    continue
+  }
+  $u = ([string]$r.u).ToLower()
+  if (-not $u) { $stCount.miss++; continue }
+  $stCount.resolved++
+
+  $n = [int]$r.n
+  $t0 = [string]$r.t
+  $reasons = @()
+  $dupKey = $known.ContainsKey($u) -or $poolKeys.ContainsKey($u) -or ($r.id -and $poolKeys.ContainsKey([string]$r.id))
+  if ($dupKey) { $reasons += "dup"; $stCount.dup++ }
+  $topicOk = ($t0 + " " + $u) -match $rxTopic
+  if (-not $topicOk) { $reasons += "topic"; $stCount.topic_fail++ }
+  if ($rxBad -and (($t0 + " " + $u) -match $rxBad)) { $reasons += "excluded"; $stCount.bad++ }
+  if ($r.bc) { $reasons += "broadcast"; $stCount.bc++ }
+  if ($r.jr) { $reasons += "join_request"; $stCount.join_req++ }
+  if ($n -le 0) { $reasons += "n_unknown"; $stCount.unknown_n++ }
+  elseif ($n -lt $CompareMin) { $reasons += "n_lt_compare"; $stCount.n_lt_150++ }
+
+  $obj = [pscustomobject]@{
+    run_id = $runId; u = $u; id = [string]$r.id; n = $n; t = $t0
+    h = [string]$r.h; k = [string]$r.k; bc = [bool]$r.bc; jr = [bool]$r.jr
+    topic_ok = [bool]$topicOk; hits = [int]$st.links[$u]
+    reasons = @($reasons); effective_min = $MinMembers; compare_min = $CompareMin
+    at = (Get-Date).ToString("s")
+  }
+
+  $baseOk = $topicOk -and (-not $dupKey) -and (-not $r.bc) -and (-not $r.jr) -and (-not ($rxBad -and (($t0 + " " + $u) -match $rxBad)))
+  if ($baseOk -and $n -ge $MinMembers) {
+    $cand300 += $obj; $cand150 += $obj
+    if ($n -lt 300) { $diff += $obj }
+  } elseif ($baseOk -and $n -ge $CompareMin -and $n -lt $MinMembers) {
+    $diff += $obj          # 降门槛才会被放行
+    $cand150 += $obj
+  }
+  if (-not $rejectsOn -and $reasons.Count -eq 0) { }
+
+  if ($reasons.Count -gt 0 -or -not $baseOk) {
+    if ($rejectsOn) { $rejects += $obj }
+  }
+}
+
+# 差集再算一次（严格：150<=n<300 且其余条件全过）
+$diff = @($cand150 | Where-Object { $_.n -ge 150 -and $_.n -lt 300 } | Sort-Object n -Descending)
+
+$measure = [pscustomobject]@{
+  run_id = $runId; profile_version = ""; min_members = $MinMembers; compare_min = $CompareMin
+  resolved = $stCount.resolved; miss = $stCount.miss
+  dup = $stCount.dup; topic_fail = $stCount.topic_fail; excluded = $stCount.bad
+  broadcast = $stCount.bc; join_request = $stCount.join_req
+  n_lt_compare = $stCount.n_lt_150; n_unknown = $stCount.unknown_n
+  new_usable_300 = @($cand300).Count
+  new_usable_150 = @($cand150).Count
+  diff_count = @($diff).Count
+  pool_before = $poolKeys.Count
+  taken_at = (Get-Date).ToString("s")
+}
+try {
+  $cfgm2 = Get-Content (Join-Path $baseDir "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ($cfgm2.profile -and $cfgm2.profile.version) { $measure.profile_version = [string]$cfgm2.profile.version }
+} catch { }
+
+$mPath = Join-Path $measureDir ($runId + ".json")
+[System.IO.File]::WriteAllText($mPath, ($measure | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding($false)))
+
+if ($rejectsOn -and $rejects.Count -gt 0) {
+  $rp = Join-Path $baseDir "data\tg_rejects.jsonl"
+  $sb = New-Object System.Text.StringBuilder
+  foreach ($x in $rejects) { [void]$sb.AppendLine(($x | ConvertTo-Json -Compress -Depth 5)) }
+  [System.IO.File]::AppendAllText($rp, $sb.ToString(), (New-Object System.Text.UTF8Encoding($false)))
+  Write-Log ("rejects 落盘 " + $rejects.Count + " 条 → data\tg_rejects.jsonl")
+}
+
+Write-Log ("MEASURE " + $runId + " resolved=" + $measure.resolved + " miss=" + $measure.miss + " dup=" + $measure.dup + " topic_fail=" + $measure.topic_fail + " bc=" + $measure.broadcast + " n<150=" + $measure.n_lt_compare + " usable300=" + $measure.new_usable_300 + " usable150=" + $measure.new_usable_150 + " diff=" + $measure.diff_count)
+Ev ("tg measure usable300=" + $measure.new_usable_300 + " usable150=" + $measure.new_usable_150 + " diff=" + $measure.diff_count)
+
+$new = @($cand300 | ForEach-Object {
+  [pscustomobject]@{ u = $_.u; n = $_.n; t = $_.t; h = $_.h; k = $_.k; id = $_.id; hits = $_.hits }
+})
 $new = @($new | Sort-Object n -Descending)
 
-Write-Log ("过滤后新候选 " + $new.Count + "（解析总数 " + @($st.resolved).Count + "，已知 " + $known.Count + "，门槛 " + $MinMembers + "）")
+Write-Log ("过滤后新候选 " + $new.Count + "（解析总数 " + @($st.resolved).Count + "，已知 " + $known.Count + "，门槛 " + $MinMembers + "，对比档 " + $CompareMin + "）")
 
 
 

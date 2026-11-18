@@ -1,4 +1,4 @@
-﻿{
+{
   "discord": {
     "token": "",
     "max_users_per_day": 2000,
@@ -15,18 +15,21 @@
     "wiki_url": "https://<your-tenant>.feishu.cn/wiki/<wiki_token>?table=<table_id>&view=<view_id>",
     "webhook": "https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>"
   },
-
-  "platforms": ["Facebook", "Telegram", "Discord", "Reddit"],
-
+  "platforms": [
+    "Facebook",
+    "Telegram",
+    "Discord",
+    "Reddit"
+  ],
   "quotas": {
     "Facebook": 5,
     "Telegram": 20,
     "Discord": 0,
     "Reddit": 0
   },
-
-  "reserved": ["Reddit"],
-
+  "reserved": [
+    "Reddit"
+  ],
   "filters": {
     "min_members": {
       "Facebook": 1000,
@@ -35,22 +38,49 @@
       "Reddit": 1000
     },
     "recent_activity_days": 7,
-    "preferred_languages": ["en"],
+    "preferred_languages": [
+      "en"
+    ],
     "skip_verification": true,
     "exclude_keywords": [
-      "valORANT", "Roblox", "MEE6", "OwO Bot", "Discord Bots",
-      "Polymarket", "Gartic", "IlloJuan"
+      "valORANT",
+      "Roblox",
+      "MEE6",
+      "OwO Bot",
+      "Discord Bots",
+      "Polymarket",
+      "Gartic",
+      "IlloJuan"
     ],
     "cs2_keywords": [
-      "cs2", "csgo", "counter-strike", "skin", "case", "trade",
-      "market", "gamble", "roulette", "upgrade", "giveaway",
-      "faceit", "premier", "pug", "lounge", "开箱", "皮肤", "电竞"
+      "cs2",
+      "csgo",
+      "counter-strike",
+      "skin",
+      "case",
+      "trade",
+      "market",
+      "gamble",
+      "roulette",
+      "upgrade",
+      "giveaway",
+      "faceit",
+      "premier",
+      "pug",
+      "lounge",
+      "开箱",
+      "皮肤",
+      "电竞"
     ]
   },
-
   "report": {
     "title": "📊 社群日报",
-    "platform_order": ["Facebook", "Telegram", "Discord", "Reddit"],
+    "platform_order": [
+      "Facebook",
+      "Telegram",
+      "Discord",
+      "Reddit"
+    ],
     "card_color": "indigo",
     "wan_threshold": 10000,
     "k_threshold": 1000,
@@ -58,36 +88,48 @@
     "show_invalid_row": true,
     "show_write_status": true
   },
-
   "outputs": {
     "feishu": true,
     "sqlite": false,
     "csv": false,
     "jsonl": false
   },
-
   "schedule": {
     "enabled": true,
     "time": "10:00"
   },
-
   "paths": {
     "workdir": "D:\\DeepSeek\\运营",
     "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     "chrome_debug_profile": "D:\\ChromeFeishu\\profile",
     "cdp_port": 9222
   },
-
   "queries": {
     "Telegram": [
-      "csgo chat", "cs2 trade", "csgo trading", "cs2 skins",
-      "cs2 market", "cs2 community", "cs2 chat", "csgo trade"
+      "csgo chat",
+      "cs2 trade",
+      "csgo trading",
+      "cs2 skins",
+      "cs2 market",
+      "cs2 community",
+      "cs2 chat",
+      "csgo trade"
     ],
     "Facebook": [
-      "cs2 trade", "csgo trading", "cs2 skins", "cs2 buy sell trade"
+      "cs2 trade",
+      "csgo trading",
+      "cs2 skins",
+      "cs2 buy sell trade"
     ],
     "Reddit": [
-      "r/GlobalOffensive", "r/csgo", "cs2 skins", "csgo trade"
+      "r/GlobalOffensive",
+      "r/csgo",
+      "cs2 skins",
+      "csgo trade"
     ]
+  },
+  "rejects": {
+    "enabled": true,
+    "ttl_days": 14
   }
 }
