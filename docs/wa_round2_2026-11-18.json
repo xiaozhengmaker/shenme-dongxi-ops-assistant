@@ -1,0 +1,63 @@
+{
+  "run_id": "wa-round2-202611181925",
+  "at": "2026-11-18T19:26:27",
+  "mode": "search_only",
+  "max_join": 0,
+  "publishers_checked": 2,
+  "pages_checked": 2,
+  "pages_ok": 2,
+  "pages_failed": 0,
+  "invites_with_source": 2,
+  "previews": 1,
+  "preview_status": {
+    "community_join": 1
+  },
+  "topic_verified": 1,
+  "profile_matching_new": 0,
+  "enriched_existing": 0,
+  "joined": 0,
+  "approval_requests": 0,
+  "publishers": [
+    {
+      "name": "GOAT Gaming Center",
+      "url": "https://www.goatgc.com.br/campeonatos",
+      "http": 200,
+      "entry": "https://chat.whatsapp.com/GmXQpc7eRPWHwknvJbIgoS",
+      "entry_label": "Entrar na comunidade / Comunidade do WhatsApp",
+      "target_type": "whatsapp_community",
+      "purpose": "venue + multi-game esports (CS2 among them)",
+      "preview": {
+        "group_name": "GOAT Gaming Center",
+        "kind": "Community",
+        "groups": 8,
+        "created": "2023-12-14",
+        "buttons": [
+          "Read more",
+          "Cancel",
+          "Join community"
+        ],
+        "note": "When you join this community, you will be added to its announcement group; profile visible to community admins"
+      },
+      "verdict": "public_community_but_off_topic"
+    },
+    {
+      "name": "CIA eSports",
+      "url": "https://ciaesports.com.br/cs2.html",
+      "http": 200,
+      "entries": [
+        {
+          "label": "grupo de WhatsApp oficial do torneio",
+          "public_link": false,
+          "kind": "participant_only"
+        },
+        {
+          "label": "ENTRAR NO GRUPO SAC",
+          "link": "https://chat.whatsapp.com/D5uCfSwPjbsDDY6olnQtmU",
+          "kind": "support"
+        }
+      ],
+      "preview": null,
+      "verdict": "no_public_profile_matching_entry"
+    }
+  ]
+}
