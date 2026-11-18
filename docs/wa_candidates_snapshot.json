@@ -87,7 +87,10 @@
       "admission": "open",
       "type": "group",
       "created": "2025-03-10",
-      "note": "community A7 Skins #1 子群；预览 12s"
+      "note": "community A7 Skins #1 子群；预览 12s",
+      "status": "joined",
+      "joined_at": "2026-11-18T19:37:03",
+      "joined_confirmed": 1
     },
     {
       "code": "ELqCjojwLgTC0j5gXvJHgX",

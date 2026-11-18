@@ -1,0 +1,38 @@
+{
+  "run_id": "wa-round3-a7-join-202611181936",
+  "at": "2026-11-18T19:37:03",
+  "target": {
+    "invite": "E2hUAwnmo1Z3t1Pq7tAvrv",
+    "publisher": "A7 Skins",
+    "page": "https://a7skins.com.br/",
+    "group_name": "A7 Skins - C/V SKINS CS2 #1",
+    "created": "2025-03-10",
+    "community": "A7 Skins #1",
+    "announcement_group": "A7 Skins #1 (welcome to the community)",
+    "purpose": "trade",
+    "invite_published": true,
+    "preview_action": "join_group",
+    "recheck": {
+      "name_unchanged": true,
+      "button": "Join group",
+      "approval_required": false
+    }
+  },
+  "join": {
+    "attempts": 1,
+    "clicked": "Join group",
+    "dialog_closed": true,
+    "joined_confirmed": 1,
+    "evidence": [
+      "chat list row: A7 Skins #1 — Welcome to the community!",
+      "group body: You joined this group / All community members can use this chat"
+    ]
+  },
+  "member_count_visible": null,
+  "member_count_source": "not rendered in chat view (info panel did not expose count)",
+  "counted_as_new_group": 1,
+  "notes": [
+    "community 与 announcement group 另记，不计入新增群数",
+    "本轮只取群级信息，未把成员号码写入 SQLite/飞书"
+  ]
+}
