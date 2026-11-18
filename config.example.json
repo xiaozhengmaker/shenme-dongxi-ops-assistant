@@ -136,5 +136,10 @@
     "enabled": true,
     "persist": true,
     "show_in_live": true
+  },
+  "alias_shadow": {
+    "enabled": false,
+    "mode": "off",
+    "file": "data/tg_alias_shadow.jsonl"
   }
 }
