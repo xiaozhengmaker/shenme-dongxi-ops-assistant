@@ -1,0 +1,104 @@
+{
+  "savedAt": "2026-11-13T12:32:16",
+  "queries": [
+    "\"CS2\" \"WhatsApp group link\"",
+    "\"CS2\" \"chat.whatsapp.com\"",
+    "site:chat.whatsapp.com \"CS2\"",
+    "\"CS2\" \"WhatsApp community\"",
+    "\"CS2\" \"WhatsApp invite\"",
+    "\"CSGO\" \"chat.whatsapp.com\"",
+    "site:chat.whatsapp.com \"CSGO\"",
+    "\"CSGO\" \"WhatsApp group link\"",
+    "\"CSGO\" \"WhatsApp invite\"",
+    "\"CSGO\" \"WhatsApp community\"",
+    "\"CS2\" \"skin trading\" \"WhatsApp\"",
+    "\"CSGO\" \"skin trading\" \"WhatsApp\""
+  ],
+  "items": [
+    {
+      "code": "EiX3DB2nCF8LrVNl2waxoO",
+      "name": "2 O Crestani Ofertas",
+      "region": "未知",
+      "lang": "未知",
+      "purpose": "未知",
+      "relevance": "pending",
+      "status": "已在群内",
+      "join": "已在群内",
+      "note": "Crestani 已加入",
+      "sources": [
+        {
+          "q": "seed",
+          "engine": "file",
+          "snippet": "Crestani 已加入",
+          "url": "D:\\DeepSeek\\运营\\data\\wa_seeds.txt",
+          "at": "2026-11-13T12:28:34"
+        }
+      ],
+      "checkedAt": "2026-11-13T12:31:32"
+    },
+    {
+      "code": "CWomt7bPy5QGpmSwqRqqM2",
+      "name": "Garimpo de Ofertas #2",
+      "region": "未知",
+      "lang": "未知",
+      "purpose": "未知",
+      "relevance": "pending",
+      "status": "已在群内",
+      "join": "已在群内",
+      "note": "直连群 2",
+      "sources": [
+        {
+          "q": "seed",
+          "engine": "file",
+          "snippet": "直连群 2",
+          "url": "D:\\DeepSeek\\运营\\data\\wa_seeds.txt",
+          "at": "2026-11-13T12:28:34"
+        }
+      ],
+      "checkedAt": "2026-11-13T12:31:54"
+    },
+    {
+      "code": "DmlNOVxPIWPANBZa8cL6AG",
+      "name": "Mamãe & Bebê | Só Promoções",
+      "region": "未知",
+      "lang": "未知",
+      "purpose": "未知",
+      "relevance": "pending",
+      "status": "已在群内",
+      "join": "已在群内",
+      "note": "直连群 3",
+      "sources": [
+        {
+          "q": "seed",
+          "engine": "file",
+          "snippet": "直连群 3",
+          "url": "D:\\DeepSeek\\运营\\data\\wa_seeds.txt",
+          "at": "2026-11-13T12:28:34"
+        }
+      ],
+      "checkedAt": "2026-11-13T12:32:16"
+    },
+    {
+      "code": "E2hUAwnmo1Z3t1Pq7tAvrv",
+      "name": "A7 Skins - C/V SKINS CS2 #1",
+      "source": "https://a7skins.com.br/",
+      "publisher": "A7 Skins",
+      "purpose": "trade",
+      "admission": "open",
+      "type": "group",
+      "created": "2025-03-10",
+      "note": "community A7 Skins #1 子群；预览 12s"
+    },
+    {
+      "code": "ELqCjojwLgTC0j5gXvJHgX",
+      "name": "RB Skins Exclusivo #1",
+      "source": "https://linktr.ee/rbskins_cs2",
+      "publisher": "RB SKINS",
+      "purpose": "trade",
+      "admission": "open",
+      "type": "group",
+      "created": "2025-03-11",
+      "note": "预览 12s"
+    }
+  ]
+}
