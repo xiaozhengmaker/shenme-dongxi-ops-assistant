@@ -1553,14 +1553,16 @@ while ($listener.IsListening) {
         if ($state.queries.Count -eq 0) {
       if (-not $state.relaxed -and $state.candidates.Count -lt $need) {
         $state.relaxed = $true
-        $state.minNow = [Math]::Max(50, [int][Math]::Floor($minMembers / 3))
+        $floor = 30
+    try { if ($cfg.filters.min_floor) { $floor = [int]$cfg.filters.min_floor } } catch { }
+    $state.minNow = [Math]::Max($floor, [int][Math]::Floor($minMembers / 3))
         foreach ($q in @(Get-Keywords $Platform)) { $state.queries.Enqueue($q) }
         Write-Host ("[hub] 候选不足，放宽到 " + $state.minNow + " 人重跑一轮")
         Send-Json $ctx 204 $null; continue
       }
-      if ($state.relaxed -and -not $state.relaxed2 -and $state.candidates.Count -lt $need -and [int]$state.minNow -gt 50) {
+      if ($state.relaxed -and -not $state.relaxed2 -and $state.candidates.Count -lt $need -and [int]$state.minNow -gt $floor) {
         $state.relaxed2 = $true
-        $state.minNow = 50
+        $state.minNow = $floor
         foreach ($q in @(Get-Keywords $Platform)) { $state.queries.Enqueue($q) }
         Write-Host ("[hub] 候选仍不足，门槛降到 50 重跑一轮")
         Add-Event ("候选仍不足，门槛降到 " + 50 + " 重跑一轮")
@@ -1584,7 +1586,7 @@ while ($listener.IsListening) {
         if ($state.queue.Count -eq 0) { $state.phase = "done"; $state.running = $false; Add-Event ("本轮结束 · 加入 " + $state.joined + " / 跳过 " + $state.skipped + " / 失败 " + $state.failed); Send-Json $ctx 204 $null; continue }
         $c = $state.queue.Dequeue()
         $id = Next-TaskId
-        $state.pending = @{ kind = "join"; id = $id }
+        $state.pending = @{ kind = "join"; id = $id; cand = $c }
         $rd = 0; try { $rd = [int]$cfg.filters.recent_activity_days } catch { }
         Send-Json $ctx 200 @{ action = "join"; platform = $Platform; id = $id; u = $c.u; chatId = $c.id;
                               title = $c.title; n = $c.n; self = $state.self; q = $c.q; recentDays = $rd;
@@ -1730,6 +1732,7 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
       elseif ($kind -eq "join") {
         $v = [string]$r.value
         $tgt = $r.target
+        if (-not $tgt -and $state.pending -and $state.pending.cand) { $tgt = $state.pending.cand }
         if ($v -eq "joined" -or $v -eq "already") {
           if ($tgt) { Write-JoinRecord $tgt $v | Out-Null }
           $state.joined++
