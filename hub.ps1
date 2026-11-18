@@ -343,7 +343,7 @@ if ($QuotaOverride -gt 0) { $need = $QuotaOverride }
 
 
 function Get-ResumeLive {
-  $ri = @{ enabled = $true; budget = 0; targets = 0; sent = 0; sent_total = 0; done = 0;
+  $ri = @{ mode = "production"; enabled = $true; budget = 0; targets = 0; sent = 0; sent_total = 0; done = 0;
            terminated = 0; pending = 0; retry_due = 0; send_unknown = 0;
            reconcile_ok = $false; last_run = ""; last_at = ""; last_report = "" }
   try {
@@ -365,7 +365,7 @@ function Get-ResumeLive {
       $ri.last_run = [string]$rs.resume_run
       $ri.last_at = [string]$rs.at
     }
-    $lr = Get-ChildItem (Join-Path $here "data") -Filter "tg_recovery_*.json" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $lr = Get-ChildItem (Join-Path $here "data") -Filter "tg_recovery_2*.json" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($lr) { $ri.last_report = $lr.Name }
   } catch { }
   return $ri

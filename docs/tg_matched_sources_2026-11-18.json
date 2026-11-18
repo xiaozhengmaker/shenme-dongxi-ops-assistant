@@ -1,0 +1,861 @@
+{
+  "run_id": "run-20261118171936",
+  "snapshot": "tg_links_snapshot_run-20261118171936.json",
+  "snapshot_at": "2026-11-18T17:22:23",
+  "candidates": 26,
+  "source_hits": {
+    "pool": 25,
+    "alias": 26,
+    "known": 1,
+    "db": 1
+  },
+  "combo_counts": {
+    "alias+pool": 25,
+    "alias+db+known": 1
+  },
+  "combo_total": 26,
+  "feishu_snapshot": false,
+  "rows": [
+    {
+      "target_id": "maincast_sport",
+      "peer_id": "2446262668",
+      "title": "Maincast Sport",
+      "n": 10224,
+      "hits": 238,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:maincast_sport"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:maincast_sport"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:2446262668"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "2446262668",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "traderesalecs2",
+      "peer_id": "2333437836",
+      "title": "🔥 Trade&Resale CS2 🔥",
+      "n": 1110,
+      "hits": 192,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:traderesalecs2"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:traderesalecs2"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:2333437836"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "2333437836",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "csgo_russ",
+      "peer_id": "1107778588",
+      "title": "Новости КС 2 | Counter Strike 2",
+      "n": 27001,
+      "hits": 184,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:csgo_russ"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:csgo_russ"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:1107778588"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "1107778588",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "cs_go_newsru",
+      "peer_id": "4330109694",
+      "title": "Counter Strike 2 • Новости",
+      "n": 13406,
+      "hits": 153,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:cs_go_newsru"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:cs_go_newsru"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:4330109694"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "4330109694",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "cs2uz",
+      "peer_id": "1645967220",
+      "title": "CS2 SKINS | UZBEKISTAN 🇺🇿",
+      "n": 5290,
+      "hits": 103,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:cs2uz"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:cs2uz"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:1645967220"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "1645967220",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "csgouz",
+      "peer_id": "1763034941",
+      "title": "CS2 UZBEKISTAN",
+      "n": 9915,
+      "hits": 100,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:csgouz"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:csgouz"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:1763034941"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "1763034941",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "prospectsby",
+      "peer_id": "3587395078",
+      "title": "Prospects",
+      "n": 553,
+      "hits": 94,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:prospectsby"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:prospectsby"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:3587395078"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "3587395078",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "csavdo",
+      "peer_id": "1313558347",
+      "title": "BUY & SELL MARKET | STEAM 🇺🇿",
+      "n": 5202,
+      "hits": 92,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:csavdo"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:csavdo"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:1313558347"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "1313558347",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "cs2irannn",
+      "peer_id": "2680131574",
+      "title": "CS2-IRAN",
+      "n": 2191,
+      "hits": 90,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:cs2irannn"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:cs2irannn"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:2680131574"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "2680131574",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "ukrainian_cs",
+      "peer_id": "3758541137",
+      "title": "Ukrainian CS2",
+      "n": 522,
+      "hits": 90,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:ukrainian_cs"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:ukrainian_cs"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:3758541137"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "3758541137",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "metabozor",
+      "peer_id": "1125920955",
+      "title": "TONY ADMIN || ISBOT 💠",
+      "n": 2614,
+      "hits": 85,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:metabozor"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:metabozor"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:1125920955"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "1125920955",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "pvg_premier_league_chat",
+      "peer_id": "2095984004",
+      "title": "PPL Chat",
+      "n": 595,
+      "hits": 80,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:pvg_premier_league_chat"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:pvg_premier_league_chat"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:2095984004"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "2095984004",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "solo_cs2",
+      "peer_id": "3138906214",
+      "title": "Solo Cs2😎",
+      "n": 10657,
+      "hits": 64,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:solo_cs2"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:solo_cs2"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:3138906214"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "3138906214",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "pvg_premier_league",
+      "peer_id": "2041152407",
+      "title": "Pavaga Premier League | CS2",
+      "n": 2098,
+      "hits": 60,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:pvg_premier_league"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:pvg_premier_league"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:2041152407"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "2041152407",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "razervpn1",
+      "peer_id": "2806441497",
+      "title": "Razer VPN | کانفیگ پرسرعت",
+      "n": 1613,
+      "hits": 43,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:razervpn1"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:razervpn1"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:2806441497"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "2806441497",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "cs2uzb",
+      "peer_id": "1823039758",
+      "title": "CS2 | Uzbekistan Chat",
+      "n": 7375,
+      "hits": 40,
+      "matched_sources": [
+        "known",
+        "db",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "known",
+          "match_key": "handle:cs2uzb"
+        },
+        {
+          "source": "db",
+          "match_key": "id:1823039758"
+        },
+        {
+          "source": "db",
+          "match_key": "handle:cs2uzb"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:cs2uzb"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:1823039758"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "1823039758",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "langamebro",
+      "peer_id": "3261982743",
+      "title": "LANGAME Bro | Комьюнити ланнеров",
+      "n": 12826,
+      "hits": 38,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:langamebro"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:langamebro"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:3261982743"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "3261982743",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "rfl_pro_cs2",
+      "peer_id": "2461549148",
+      "title": "RFL CS 2 Community",
+      "n": 243643,
+      "hits": 37,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:rfl_pro_cs2"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:rfl_pro_cs2"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:2461549148"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "2461549148",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "tonyoutuber",
+      "peer_id": "1229469621",
+      "title": "Tony Youtuber || Gaming",
+      "n": 21547,
+      "hits": 35,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:tonyoutuber"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:tonyoutuber"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:1229469621"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "1229469621",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "ru500casino",
+      "peer_id": "2043133367",
+      "title": "КСГО500",
+      "n": 5949,
+      "hits": 32,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:ru500casino"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:ru500casino"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:2043133367"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "2043133367",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "hamstermrkt",
+      "peer_id": "3941269448",
+      "title": "HAMSTER MRKT/ОБЩЕНИЕ",
+      "n": 439,
+      "hits": 31,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:hamstermrkt"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:hamstermrkt"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:3941269448"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "3941269448",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "langameesports",
+      "peer_id": "3133696985",
+      "title": "LANGAME Esports | Киберспорт в компьютерных клубах",
+      "n": 3052,
+      "hits": 16,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:langameesports"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:langameesports"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:3133696985"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "3133696985",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "jurvusw",
+      "peer_id": "3908281241",
+      "title": "@Cabinetjarvisbot",
+      "n": 1631,
+      "hits": 12,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:jurvusw"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:jurvusw"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:3908281241"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "3908281241",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "arimaxshopbackup",
+      "peer_id": "2549183744",
+      "title": "Ari_max shop",
+      "n": 891,
+      "hits": 11,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:arimaxshopbackup"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:arimaxshopbackup"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:2549183744"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "2549183744",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "rushsite",
+      "peer_id": "3087310193",
+      "title": "RushSite | CS2",
+      "n": 11795,
+      "hits": 11,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:rushsite"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:rushsite"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:3087310193"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "3087310193",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    },
+    {
+      "target_id": "hamster_trade228",
+      "peer_id": "2148854370",
+      "title": "HAMSTER | CS2",
+      "n": 11121,
+      "hits": 8,
+      "matched_sources": [
+        "pool",
+        "alias"
+      ],
+      "match_details": [
+        {
+          "source": "pool",
+          "match_key": "handle:hamster_trade228"
+        },
+        {
+          "source": "alias",
+          "match_key": "handle:hamster_trade228"
+        },
+        {
+          "source": "alias",
+          "match_key": "id:2148854370"
+        }
+      ],
+      "status": "matched",
+      "current_mapping": {
+        "peer_id": "2148854370",
+        "observed_at": "2026-11-18T17:46:00+08:00"
+      },
+      "historical_identity_verified": false,
+      "snapshot_at": "2026-11-18T17:22:23"
+    }
+  ]
+}

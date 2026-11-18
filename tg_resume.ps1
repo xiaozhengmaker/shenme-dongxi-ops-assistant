@@ -7,6 +7,7 @@ param(
   [switch]$DryRun,
   [switch]$ResetState,
   [switch]$IgnoreCooldown,
+  [string]$SimNow = "",
   [int]$WaitSec = 20,
   [int]$MinMembers = 300
 )
@@ -27,8 +28,12 @@ try { if ($null -ne $cfg.resume.enabled) { $recoveryOn = [bool]$cfg.resume.enabl
 if (-not $recoveryOn -and -not $Replay) { Write-Log "config.resume.enabled=false，退出"; exit 0 }
 
 $floodPath = Join-Path $dataDir "flood_state.json"
-$statePath = Join-Path $dataDir "tg_recovery_state.json"
-$reportPath = Join-Path $dataDir ("tg_recovery_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".json")
+$stateDir = $dataDir
+if ($Replay) { $stateDir = Join-Path $dataDir "replay"; New-Item -ItemType Directory -Force -Path $stateDir | Out-Null }
+$statePath = Join-Path $stateDir "tg_recovery_state.json"
+$reportDir = $dataDir
+if ($Replay) { $reportDir = Join-Path $dataDir "replay"; New-Item -ItemType Directory -Force -Path $reportDir | Out-Null }
+$reportPath = Join-Path $reportDir ("tg_recovery_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".json")
 
 function Read-Json([string]$p) {
   if (-not (Test-Path $p)) { return $null }
@@ -119,6 +124,7 @@ if (-not $st -or -not $st.targets -or $ResetState) {
     budget       = $Budget
     sent         = 0
     sent_total   = 0
+    budget_reserved = 0
     targets      = @($targets | ForEach-Object { [pscustomobject]@{ u = $_; status = "pending"; verdict = ""; n = 0; peer_id = ""; err = ""; at = "" } })
   }
 }
@@ -181,12 +187,14 @@ function Resolve-One([string]$u) {
 # ---------- 回放（离线，不发请求） ----------
 function Invoke-Replay([string]$mode) {
   $sent = 0
+  if ($blockedNow) { Write-Log "[replay] 模拟时间在冷却截止之前，本轮 0 派发"; return 0 }
   foreach ($t in $st.targets) {
     if ($sent -ge $st.budget) { break }
     if ($t.status -ne "pending") { continue }
     $sent++
     $st.sent = $sent
     $st.sent_total = [int]$st.sent_total + 1
+    $st.budget_reserved = [int]$st.budget_reserved + 1
     if ($mode -eq "first_420" -and $sent -eq 1) {
       $t.status = "retry_due"; $t.verdict = "rate_limited"; $t.err = "FLOOD_WAIT_67649"
       Save-Json $statePath $st
@@ -202,8 +210,20 @@ function Invoke-Replay([string]$mode) {
 # 预算按「本轮」计；累计另记 sent_total。到期把 retry_due 转回 pending。
 if (-not $st.PSObject.Properties["sent_total"]) { $st | Add-Member -NotePropertyName sent_total -NotePropertyValue 0 }
 $sent = 0
+$st.sent = 0
+$st.budget_reserved = 0
 $blockedNow = $false
 try { $blockedNow = Test-FloodBlocked "telegram" } catch { }
+if ($SimNow) {
+  try {
+    $simT = [datetime]::Parse($SimNow, $null, [System.Globalization.DateTimeStyles]::RoundtripKind)
+    $blockedNow = $false
+    if ($flood -and $flood.retry_not_before) {
+      $deadline = [datetime]::Parse([string]$flood.retry_not_before, $null, [System.Globalization.DateTimeStyles]::RoundtripKind)
+      $blockedNow = ($simT -lt $deadline)
+    }
+  } catch { }
+}
 if ($IgnoreCooldown) { $blockedNow = $false }
 if (-not $blockedNow) {
   foreach ($t in $st.targets) { if ($t.status -eq "retry_due") { $t.status = "pending"; Write-Log ("[resume] retry_due 到期转入待处理: " + $t.u) } }
@@ -229,6 +249,7 @@ if ($Replay) {
       $sent++
       $st.sent = $sent
       $st.sent_total = [int]$st.sent_total + 1
+      $st.budget_reserved = [int]$st.budget_reserved + 1
       Save-Json $statePath $st
 
       $r = Resolve-One $u
@@ -290,8 +311,10 @@ $report = [ordered]@{
   mode               = $(if ($Replay) { "replay:" + $Replay } else { "live" })
   budget             = $st.budget
   targets            = @($st.targets).Count
-  sent               = [int]$st.sent
+  sent               = [int]$sent
   sent_total         = [int]$st.sent_total
+  budget_reserved    = [int]$st.budget_reserved
+  confirmed_sent     = [int]$st.sent - $sendUnknown
   done               = $done
   terminated         = $terminated
   pending            = $pendingN
