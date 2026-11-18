@@ -11,14 +11,27 @@ if (-not $ConfigPath) {
 }
 
 $script:Cfg  = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$script:Fs   = $script:Cfg.feishu
+$script:Fs   = $global:GOpsCfg.feishu
+    $global:GOpsFs = $script:Fs
+    $global:GOpsCfg = $script:Cfg
 $script:Root = "https://open.feishu.cn/open-apis"
 $script:Tok  = $null
 $script:TokExp = [datetime]::MinValue
 
+
+function Get-FsCfg {
+  if ($global:GOpsFs -and $global:GOpsFs.base_app_token -and $global:GOpsFs.app_id) { return $global:GOpsFs }
+  $cfgPath2 = Join-Path (Split-Path -Parent $PSScriptRoot) "config.json"
+  $c2 = Get-Content $cfgPath2 -Raw -Encoding UTF8 | ConvertFrom-Json
+  $global:GOpsFs = $c2.feishu
+  $global:GOpsCfg = $c2
+  return $global:GOpsFs
+}
+
 function Get-FsToken {
   if ($script:Tok -and (Get-Date) -lt $script:TokExp) { return $script:Tok }
-  $body = @{ app_id = $script:Fs.app_id; app_secret = $script:Fs.app_secret } | ConvertTo-Json
+  $fsCfg = Get-FsCfg
+  $body = @{ app_id = $fsCfg.app_id; app_secret = $fsCfg.app_secret } | ConvertTo-Json
   $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
   $r = Invoke-RestMethod -Uri "$script:Root/auth/v3/tenant_access_token/internal" -Method Post -ContentType "application/json; charset=utf-8" -Body $bytes
   if ($r.code -ne 0) { throw "token failed: $($r.code) $($r.msg)" }
@@ -53,8 +66,9 @@ function Invoke-Fs {
 
 function Get-TableBase {
   param([string]$TableId)
-  if (-not $TableId) { $TableId = $script:Fs.table_id }
-  return "/bitable/v1/apps/" + $script:Fs.base_app_token + "/tables/" + $TableId
+  $fsCfg = Get-FsCfg
+  if (-not $TableId) { $TableId = $fsCfg.table_id }
+  return "/bitable/v1/apps/" + $fsCfg.base_app_token + "/tables/" + $TableId
 }
 
 function Get-FsRecords {
@@ -122,9 +136,9 @@ function Remove-FsRecords {
 
 function Format-Num {
   param([double]$Value)
-  $dec = [int]$script:Cfg.report.decimals
-  $wan = [double]$script:Cfg.report.wan_threshold
-  $k = [double]$script:Cfg.report.k_threshold
+  $dec = [int]$global:GOpsCfg.report.decimals
+  $wan = [double]$global:GOpsCfg.report.wan_threshold
+  $k = [double]$global:GOpsCfg.report.k_threshold
   if ($Value -ge $wan) {
     $v = $Value / 10000
     return $v.ToString("N" + $dec) + "w"
@@ -143,7 +157,7 @@ function Send-Card {
   $body.Add("card", $Card)
   $json = $body | ConvertTo-Json -Depth 20
   $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
-  return Invoke-RestMethod -Uri $script:Fs.webhook -Method Post -ContentType "application/json; charset=utf-8" -Body $bytes
+  return Invoke-RestMethod -Uri $global:GOpsFs.webhook -Method Post -ContentType "application/json; charset=utf-8" -Body $bytes
 }
 
 function Send-Text {
@@ -155,5 +169,5 @@ function Send-Text {
   $body.Add("content", $content)
   $json = $body | ConvertTo-Json -Depth 6
   $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
-  return Invoke-RestMethod -Uri $script:Fs.webhook -Method Post -ContentType "application/json; charset=utf-8" -Body $bytes
+  return Invoke-RestMethod -Uri $global:GOpsFs.webhook -Method Post -ContentType "application/json; charset=utf-8" -Body $bytes
 }

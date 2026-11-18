@@ -28,6 +28,12 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 . (Join-Path $here "lib\feishu.ps1")
 
+try {
+  $bootLog = Join-Path $here "logs\hub.boot.log"
+  Add-Content -Path $bootLog -Encoding UTF8 -Value ("here=" + $here + " | tokLen=" + ([string]$script:Fs.base_app_token).Length + " | tbl=" + ([string]$script:Fs.table_id))
+} catch { }
+
+
 
 
 . (Join-Path $here "lib\db.ps1")
@@ -2770,6 +2776,11 @@ function Get-Summary {
     }
   } catch { }
 
+  $tg = 0; $tm = [int64]0; $td = 0; $tdm = [int64]0
+  foreach ($pt in @($pf)) {
+    $tg += [int]$pt.groups; $tm += [int64]$pt.members
+    $td += [int]$pt.todayGroups; $tdm += [int64]$pt.todayMembers
+  }
   return @{
 
 
@@ -3254,7 +3265,7 @@ while ($listener.IsListening) {
 
 
         alias_shadow = $ashInfo;
-        naming = (Get-NamingStats);
+        naming = (Get-NamingStats); fs_dbg = ([string]$script:Fs.base_app_token).Length;
         resume = (Get-ResumeLive);
 
 
