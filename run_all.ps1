@@ -8,12 +8,17 @@ param(
   [switch]$Report,
   [switch]$NoReport,
   [switch]$Fast,
-  [int]$WaitTimeoutMin = 90
+  [int]$WaitTimeoutMin = 90,
+  [string]$HubUrl = "http://127.0.0.1:8787",
+  [switch]$SkipSelfCheck
 )
 
 $ErrorActionPreference = "Continue"
+. (Join-Path $PSScriptRoot "lib\stop.ps1")
+. (Join-Path $PSScriptRoot "lib\platform_run.ps1")
+. (Join-Path $PSScriptRoot "lib\pipeline_status.ps1")
 $baseDir = Split-Path -Parent $PSCommandPath
-$hubUrl = "http://127.0.0.1:8787"
+$hubUrl = $HubUrl
 $logDir = Join-Path $baseDir "logs"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
 
@@ -36,39 +41,104 @@ function Hub([string]$method, [string]$path, $body) {
 
 Say "=== run_all 开始 ==="
 $fail = @()
-
-# 0) 前台体检
-$chk = powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $baseDir "check.ps1") 2>&1
-$chkLast = ($chk | Select-Object -Last 1)
-Say ("check.ps1 -> " + $chkLast)
-if ($chkLast -notmatch "可以开工") {
-  Say "自检未通过，中止（先处理红灯）"
-  exit 3
+$script:pipePath = Get-PipelineStatusPath -BaseDir $baseDir
+$script:pipe = New-PipelineStatus -RunId ("run_all-" + (Get-Date).ToString("yyyyMMdd-HHmmss") + "-" + $PID) -Platforms $Platforms
+function Set-Pipe([string]$current, [string]$next, [string]$state, [string]$err) {
+  try {
+    $script:pipe.updated_at = (Get-Date).ToString("o")
+    if ($current) { $script:pipe.current_platform = $current }
+    if ($next) { $script:pipe.next_platform = $next }
+    if ($state) { $script:pipe.state = $state }
+    if ($err) { $script:pipe.last_error = $err }
+    Save-PipelineStatus -Path $script:pipePath -Status $script:pipe
+  } catch { }
 }
 
-# 1) 逐平台拓群
-# -File 传参会把 "Telegram,Facebook,Reddit" 当成单个字符串，这里拆开
+# 0) 手动停止优先：stop.flag 存在时本轮不发任何启动请求
+if (Test-GOpsStop $baseDir) { Set-Pipe "stop" "" "stopped" ""; Say "stop flag -> 退出"; exit 0 }
+
+# 0.1) 配置：只跑本轮已启用的平台
+$cfg = $null
+try { $cfg = Get-Content (Join-Path $baseDir "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
+$enabled = @{}
+try {
+  if ($cfg -and $cfg.platformsEnabled) {
+    foreach ($p in $cfg.platformsEnabled.PSObject.Properties) { $enabled[[string]$p.Name] = [bool]$p.Value }
+  }
+} catch { }
 $Platforms = @($Platforms | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$Platforms = @($Platforms | Where-Object { $cfgPlatforms -or $true })
-foreach ($p in $Platforms) {
-  if (Test-GOpsStop $baseDir) { Say 'stop flag -> 退出'; exit 0 }
-  if ($SkipMembers -and $false) { }
-  Say ("--- 平台 " + $p + " 拓群开始")
-  try { Hub "POST" "/control" @{ action = "start"; platform = $p } | Out-Null } catch { Say ("启动失败 " + $p + "：" + $_.Exception.Message); $fail += $p; continue }
+if ($enabled.Count -gt 0) {
+  $Platforms = @($Platforms | Where-Object { $enabled.ContainsKey($_) -and $enabled[$_] })
+}
+if ($Platforms.Count -eq 0) { Set-Pipe "" "" "complete" ""; Say "没有已启用平台，退出"; exit 0 }
+$script:pipe = New-PipelineStatus -RunId $script:pipe.run_id -Platforms $Platforms
+Set-Pipe "self_check" ([string]$Platforms[0]) "running" ""
+
+# 1) 前台体检
+if (-not $SkipSelfCheck) {
+  $chk = powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $baseDir "check.ps1") 2>&1
+  $chkLast = ($chk | Select-Object -Last 1)
+  Say ("check.ps1 -> " + $chkLast)
+  if ($chkLast -notmatch "可以开工") {
+    Set-Pipe "self_check" "" "failed" "check_failed"
+    Say "自检未通过，中止（先处理红灯）"
+    exit 3
+  }
+}
+
+# 2) 逐平台拓群。冷却只跳过该平台；stop 正常结束；其它启动/等待故障中止本轮。
+Set-Pipe "platform_scan" "members" "running" ""
+$startCb = {
+  param($p)
+  try {
+    Hub "POST" "/control" @{ action = "start"; platform = $p } | Out-Null
+    return @{ ok = $true }
+  } catch {
+    $msg = [string]$_.Exception.Message
+    $err = "hub_unreachable"
+    $detail = $msg
+    try {
+      $j = $_.ErrorDetails.Message | ConvertFrom-Json
+      if ($j.error) { $err = [string]$j.error }
+      if ($j.detail) { $detail = [string]$j.detail }
+    } catch { }
+    return @{ ok = $false; error = $err; detail = $detail }
+  }
+}
+$waitCb = {
+  param($p)
   $deadline = (Get-Date).AddMinutes($WaitTimeoutMin)
   $lastPhase = ""
   while ((Get-Date) -lt $deadline) {
+    if (Test-GOpsStop $baseDir) { return $false }
     Start-Sleep -Seconds 10
     $h = Hub "GET" "/health" $null
     if ($h.phase -ne $lastPhase) { $lastPhase = $h.phase; Say ("  " + $p + " phase=" + $h.phase) }
-    if (-not $h.running) { break }
+    if (-not $h.running) { return $true }
   }
-  if ($h.running) { Say ("  " + $p + " 超时，跳过"); $fail += $p }
-  else { Say ("--- 平台 " + $p + " 拓群完成") }
+  return $false
 }
+$res = Invoke-PlatformSequence -Platforms $Platforms -Start $startCb -Wait $waitCb -IsStopped { Test-GOpsStop $baseDir } -Say { param($m) Say $m }
+$fail += @($res.failed)
+$script:pipe.completed = [math]::Max(0, @($Platforms).Count - @($res.failed).Count)
+if ($res.status -eq "stopped") {
+  Set-Pipe "platform_scan" "" "stopped" ""
+  Say "stop flag -> 退出"
+  try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true } | Out-Null } catch { }
+  exit 0
+}
+if ($res.status -eq "global_failure") {
+  Set-Pipe "platform_scan" "" "failed" ([string]$res.error)
+  Say ("全局故障，中止本轮：" + [string]$res.error)
+  try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true } | Out-Null } catch { }
+  exit 4
+}
+Say ("--- 平台拓群结束（失败：" + $(if (@($res.failed).Count -gt 0) { @($res.failed) -join "," } else { "无" }) + "）")
 
-# 2) 成员采样 + 人数回填
+# 3) 成员采样 + 人数回填
+Set-Pipe "members" "steam" "running" ""
 if (-not $SkipMembers) {
+  if (Test-GOpsStop $baseDir) { Set-Pipe "members" "" "stopped" ""; Say "stop flag -> 跳过成员采样"; exit 0 }
   Say "--- TG 成员采样"
   $out = powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $baseDir "tg_members_all.ps1") 2>&1
   ($out | Select-String "TOTAL|SKIP|RESULT" | Select-Object -Last 3) | ForEach-Object { Say ("  " + $_.Line) }
@@ -78,8 +148,10 @@ if (-not $SkipMembers) {
   ($out2 | Select-String "UPDATED|targets=" | Select-Object -Last 2) | ForEach-Object { Say ("  " + $_.Line) }
 }
 
-# 3) Steam 抽样 + 导入成员样本
+# 4) Steam 抽样 + 导入成员样本
+Set-Pipe "steam" "db" "running" ""
 if (-not $SkipSteam) {
+  if (Test-GOpsStop $baseDir) { Set-Pipe "steam" "" "stopped" ""; Say "stop flag -> 跳过 Steam"; exit 0 }
   Say "--- Steam 成员抽样"
   $pages = 1
   if ($Fast) { $pages = 1 }
@@ -91,8 +163,10 @@ if (-not $SkipSteam) {
   ($out4 | Select-String "CSV VIEW|WROTE" | Select-Object -Last 2) | ForEach-Object { Say ("  " + $_.Line) }
 }
 
-# 3.5) 同步到本地数据库
+# 4.5) 同步到本地数据库
 if (-not $SkipSteam) {
+  Set-Pipe "db" "report" "running" ""
+  if (Test-GOpsStop $baseDir) { Set-Pipe "db" "" "stopped" ""; Say "stop flag -> 跳过数据库"; exit 0 }
   Say "--- 同步到本地数据库"
   try {
     . (Join-Path $baseDir "lib\db.ps1")
@@ -102,18 +176,21 @@ if (-not $SkipSteam) {
   } catch { Say ("  db sync failed: " + $_.Exception.Message) }
 }
 
-# 4) 日报：默认在跑完后发（-NoReport 可跳过；-Report 保留兼容）
+# 5) 日报
+Set-Pipe "report" "leads" "running" ""
 $autoReport = (-not $NoReport) -or $Report
 if ($autoReport) {
+  if (Test-GOpsStop $baseDir) { Set-Pipe "report" "" "stopped" ""; Say "stop flag -> 跳过日报"; exit 0 }
   Say "--- 发日报"
   $out5 = powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $baseDir "report_all.ps1") 2>&1
   ($out5 | Select-String "webhook|合计|failed|error" | Select-Object -Last 3) | ForEach-Object { Say ("  " + $_.Line) }
 }
 
-try { Hub "POST" "/control" @{ action = "stop" } | Out-Null } catch { }
-if ($fail.Count -gt 0) { Say ("=== run_all 结束，失败平台：" + ($fail -join ",") + " ==="); exit 4 }
+try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true } | Out-Null } catch { }
+if ($fail.Count -gt 0) { Set-Pipe "done" "" "failed" ($fail -join ","); Say ("=== run_all 结束，失败平台：" + ($fail -join ",") + " ==="); exit 4 }
+Set-Pipe "leads" "" "running" ""
 if (-not $SkipLeads) {
-  if (Test-GOpsStop $baseDir) { Say "STOP flag present, skip leads" }
+  if (Test-GOpsStop $baseDir) { Set-Pipe "leads" "" "stopped" ""; Say "STOP flag present, skip leads" }
   else {
     Say "--- 线索流水线（扫描/打分/入库）"
     try {
@@ -123,4 +200,5 @@ if (-not $SkipLeads) {
   }
 }
 
+Set-Pipe "" "" "complete" ""
 Say "=== run_all 全部完成 ==="

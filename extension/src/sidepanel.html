@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -29,6 +29,14 @@
       <span id="progressText">—</span>
       <span id="phase" class="pill">idle</span>
     </div>
+  </section>
+
+  <section class="statusbar" id="statusbar">
+    <div class="sb-row"><span class="sb-k">平台</span><span class="sb-v"><span id="stPlatform">—</span> <span id="stPhase" class="pill">未知</span></span></div>
+    <div class="sb-row"><span class="sb-k">整轮</span><span class="sb-v"><span id="stPipeline">未知</span> <span id="stPipeMeta" class="sb-meta">无整轮证据</span></span></div>
+    <div class="sb-row"><span class="sb-k">阶段</span><span class="sb-v" id="stStage">当前 — · 下一 —</span></div>
+    <div class="sb-row hidden" id="stCooldownRow"><span class="sb-k">冷却</span><span class="sb-v" id="stCooldown"></span></div>
+    <div class="sb-row"><span class="sb-k">数据</span><span class="sb-v"><span id="stObserved">无观测</span> <span id="stFresh" class="sb-meta">未知</span></span></div>
   </section>
 
   <section class="lights" id="lights">
@@ -67,6 +75,8 @@
     <button id="btnStart" class="primary">开始运行</button>
     <button id="btnStop" class="plain">停止</button>
   </section>
+
+  <section id="feedback" class="feedback hidden"></section>
 
   <section class="livebox" id="livebox">
     <div class="ttl">运行实况 <span><span id="livePlat" class="live-pill">—</span> <span id="liveState" class="live-pill">空闲</span></span></div>

@@ -50,6 +50,10 @@ try {
 
 . (Join-Path $here "lib\ai.ps1")
 . (Join-Path $here "lib\naming.ps1")
+. (Join-Path $here "lib\join_guard.ps1")
+. (Join-Path $here "lib\platform_cooldown.ps1")
+. (Join-Path $here "lib\pipeline_status.ps1")
+$script:PlatformCooldownPath = Join-Path $here "data\platform_cooldown.json"
 $script:receiptNames = @{}
 
 
@@ -3267,6 +3271,9 @@ while ($listener.IsListening) {
         alias_shadow = $ashInfo;
         naming = (Get-NamingStats); fs_dbg = ([string]$script:Fs.base_app_token).Length;
         resume = (Get-ResumeLive);
+        observedAt = (Get-Date).ToString("o");
+        cooldowns = (Get-PlatformCooldownSnapshot -Path $script:PlatformCooldownPath -Now (Get-Date));
+        pipeline = (Get-PipelineStatusView -BaseDir $here);
 
 
 
@@ -5903,7 +5910,11 @@ while ($listener.IsListening) {
 
 
 
-  try { Clear-GOpsStop $baseDir } catch {}
+  # manual stop flag is respected; never clear it on start/pipeline
+        if (Test-GOpsStop $here) {
+          Send-Json $ctx 409 @{ ok = $false; error = "stopped" }
+          continue
+        }
 
 
 
@@ -6123,10 +6134,11 @@ while ($listener.IsListening) {
 
 
 
-  try { Clear-GOpsStop $baseDir } catch {}
-
-
-
+  # manual stop flag is respected; never clear it on start/pipeline
+        if (Test-GOpsStop $here) {
+          Send-Json $ctx 409 @{ ok = $false; error = "stopped" }
+          continue
+        }
         if ($body.platform) {
 
 
@@ -6215,6 +6227,11 @@ while ($listener.IsListening) {
 
 
 
+        $cool = Get-PlatformCooldown -Path $script:PlatformCooldownPath -Platform $Platform
+        if ($cool) {
+          Send-Json $ctx 409 @{ ok = $false; error = "cooldown"; platform = $Platform; until = $cool.until.ToString("o"); remaining_sec = $cool.remaining_sec }
+          continue
+        }
         Write-Host (Start-Run)
 
 
@@ -6343,7 +6360,12 @@ while ($listener.IsListening) {
 
 
 
-      elseif ($body.action -eq "stop") { $state.running = $false; $state.phase = "idle"; try { Set-GOpsStop $baseDir ("hub stop " + (Get-Date).ToString("HH:mm:ss")) | Out-Null } catch {}; Write-Host "[hub] stopped" }
+      elseif ($body.action -eq "stop") {
+        $state.running = $false
+        $state.phase = "idle"
+        if (-not $body.cleanup) { try { Set-GOpsStop $here ("hub stop " + (Get-Date).ToString("HH:mm:ss")) | Out-Null } catch {} }
+        Write-Host "[hub] stopped"
+      }
 
 
 
@@ -7089,6 +7111,14 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
           Add-Event $msg
 
+          try {
+            $coolMin = 30
+            if ($cfg.health -and $cfg.health.platform_cooldown_min) { $coolMin = [int]$cfg.health.platform_cooldown_min }
+            if ($coolMin -lt 1) { $coolMin = 30 }
+            $cool = Set-PlatformCooldown -Path $script:PlatformCooldownPath -Platform $Platform -Minutes $coolMin -Reason "collector_stalled"
+            Add-Event ("[hub] " + $Platform + " 冷却至 " + $cool.until.ToString("HH:mm") + "（" + $coolMin + " 分钟），本轮只停该平台")
+          } catch { }
+
 
 
           $cd = 30; try { if ($cfg.health -and $cfg.health.alert_cooldown_min) { $cd = [int]$cfg.health.alert_cooldown_min } } catch { }
@@ -7540,5 +7570,6 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 }
+
 
 

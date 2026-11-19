@@ -458,22 +458,44 @@ async function handlePreload(platforms, opts) {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === "preload") { handlePreload(msg.platforms, { recheck: !!msg.recheck }).then(sendResponse); return true; }
   if (msg && msg.type === "start") {
-    setState({ running: true, stats: { joined: 0, failed: 0, skipped: 0 } }).then(() => {
-      hubFetch("/control", { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "start" }) }).catch(() => {});
-      ensureAlarm();
-      tick();
-      sendResponse({ ok: true });
-    });
+    (async () => {
+      try {
+        const res = await hubFetch("/control", { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "start" }) });
+        let data = {};
+        try { data = await res.json(); } catch (e) {}
+        if (!res.ok || (data && data.ok === false)) {
+          sendResponse({ ok: false, error: (data && data.error) || ("http_" + res.status), detail: (data && data.detail) || "" });
+          return;
+        }
+        await setState({ running: true, stats: { joined: 0, failed: 0, skipped: 0 } });
+        ensureAlarm();
+        tick();
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: "hub_unreachable", detail: String((e && e.message) || e) });
+      }
+    })();
     return true;
   }
   if (msg && msg.type === "stop") {
-    setState({ running: false }).then(() => {
-      hubFetch("/control", { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "stop" }) }).catch(() => {});
-      stopLoop();
-      sendResponse({ ok: true });
-    });
+    (async () => {
+      try {
+        const res = await hubFetch("/control", { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "stop" }) });
+        let data = {};
+        try { data = await res.json(); } catch (e) {}
+        if (!res.ok || (data && data.ok === false)) {
+          sendResponse({ ok: false, error: (data && data.error) || ("http_" + res.status), detail: (data && data.detail) || "" });
+          return;
+        }
+        await setState({ running: false });
+        stopLoop();
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: "hub_unreachable", detail: String((e && e.message) || e) });
+      }
+    })();
     return true;
   }
   if (msg && msg.type === "heal") {

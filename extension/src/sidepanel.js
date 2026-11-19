@@ -1,4 +1,4 @@
-﻿
+
 // —— 扩展上下文守卫：扩展被重新加载后，已打开的页面会失去 chrome.* API ——
 function ctxAlive() { try { return !!(window.chrome && chrome.runtime && chrome.runtime.id); } catch (e) { return false; } }
 let CTX_ALIVE = ctxAlive();
@@ -17,9 +17,112 @@ function showDeadContext() {
 }
 
 const HUB = "http://127.0.0.1:8787";
+var START_TIMEOUT_MS = 15000;
+const STATUS_STALE_SEC = 20;
+const PIPELINE_STALE_SEC = 120;
 const $ = (s) => document.querySelector(s);
 let CFG = null;
 let SUM = null;
+let RUN_BUSY = false;
+let LIVE = null;
+let LIVE_AT = 0;
+
+function showFeedback(text, kind) {
+  const el = document.getElementById("feedback");
+  if (!el) return;
+  el.classList.remove("hidden");
+  el.className = "feedback" + (kind ? " " + kind : "");
+  el.textContent = text;
+}
+
+function friendlyError(r) {
+  const code = r && r.error ? String(r.error) : "unknown";
+  if (code === "hub_unreachable") return "后台断线";
+  if (code === "disconnected") return "后台断线";
+  if (code === "context_dead") return "扩展已失效";
+  if (code === "platform_disabled") return "平台未启用";
+  if (code === "stopped") return "存在停止标记，先移除 stop.flag";
+  if (code === "cooldown") return "该平台冷却中";
+  if (code === "empty_response") return "后台无响应";
+  if (code === "timeout_pending") return "请求超时，结果待确认";
+  return code;
+}
+
+async function sendOnce(type) {
+  if (!ctxAlive()) return { ok: false, error: "context_dead" };
+  try {
+    const r = await chrome.runtime.sendMessage({ type: type });
+    return r || { ok: false, error: "empty_response" };
+  } catch (e) {
+    return { ok: false, error: "disconnected", detail: String((e && e.message) || e) };
+  }
+}
+
+// Start may need to wait for hub; never resend on timeout, mark the result as
+// pending confirmation instead. Stop stays the normal single request path.
+function sendWithTimeout(type, ms) {
+  return new Promise(function (resolve) {
+    let settled = false;
+    const timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      resolve({ ok: false, error: "timeout_pending" });
+    }, ms);
+    sendOnce(type).then(function (r) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(r);
+    }).catch(function (e) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ ok: false, error: "disconnected", detail: String((e && e.message) || e) });
+    });
+  });
+}
+
+function setRunBusy(b) {
+  RUN_BUSY = !!b;
+  const s = document.getElementById("btnStart");
+  const t = document.getElementById("btnStop");
+  if (s) s.disabled = RUN_BUSY;
+  if (t) t.disabled = RUN_BUSY;
+}
+
+async function requestStart() {
+  if (RUN_BUSY) return;
+  setRunBusy(true);
+  showFeedback("正在请求启动…", "");
+  let r = null;
+  try { r = await sendWithTimeout("start", START_TIMEOUT_MS); } catch (e) { r = { ok: false, error: "disconnected" }; }
+  if (!r || !r.ok) {
+    if (r && r.error === "timeout_pending") {
+      showFeedback("启动请求超时，结果待确认（未自动重发）", "warn");
+    } else {
+      showFeedback("启动被拒绝：" + friendlyError(r), "bad");
+    }
+  } else {
+    showFeedback("已请求启动，后台开始执行", "ok");
+  }
+  setRunBusy(false);
+  try { await refresh(); } catch (e) {}
+}
+
+async function requestStop() {
+  if (RUN_BUSY) return;
+  setRunBusy(true);
+  showFeedback("正在请求停止…", "");
+  let r = null;
+  try { r = await sendOnce("stop"); } catch (e) { r = { ok: false, error: "disconnected" }; }
+  if (!r || !r.ok) {
+    showFeedback("停止失败：" + friendlyError(r), "bad");
+  } else {
+    showFeedback("已请求停止", "ok");
+  }
+  setRunBusy(false);
+  try { await refresh(); } catch (e) {}
+}
 
 async function loadSummary() {
   try {
@@ -53,7 +156,7 @@ async function refresh() {
   if (_lh) { _lh.className = "dot " + (alive ? "on" : "off"); _lh.title = alive ? "hub " + (hub.phase || "") : "hub 未启动"; }
   $("#hubText").textContent = alive ? "后台已连接 · 127.0.0.1:8787" : "后台未启动（先运行 hub.ps1）";
   $("#phase").textContent = hub.phase || "idle";
-  $("#kJoined").textContent = joined;
+  $("#kJoined").textContent = (st.stats && st.stats.joined) || 0;
   $("#log").textContent = st.lastLog || "—";
 
   if (r.cfg) {
@@ -84,8 +187,9 @@ async function refresh() {
   setLight("lPerm", pr.perm === true, "perm=" + pr.perm);
 
   const running = !!st.running;
-  $("#btnStart").disabled = running;
-  $("#btnStop").disabled = !running;
+  $("#btnStart").disabled = running || RUN_BUSY;
+  $("#btnStop").disabled = !running || RUN_BUSY;
+  renderStatusBar(LIVE, LIVE_AT);
 }
 
 // —— 各平台登录灯：找该平台标签页 → 注入探针 → 亮/暗 ——
@@ -206,12 +310,141 @@ async function savePlatforms() {
   } catch (e) {}
 }
 
+// —— 可信状态栏：平台阶段与整轮证据分开，无证据一律未知 ——
+function hhmmss(ms) {
+  if (!ms) return "—";
+  try {
+    return new Date(ms).toLocaleTimeString("zh-CN", { hour12: false });
+  } catch (e) { return "—"; }
+}
+
+function stageLabel(phase) {
+  if (phase === "probe") return "探测";
+  if (phase === "search") return "搜索";
+  if (phase === "join") return "加群";
+  if (phase === "pipeline") return "整轮";
+  if (phase === "done") return "结束";
+  if (phase === "idle") return "空闲";
+  return phase ? String(phase) : "未知";
+}
+
+function nextStageLabel(phase) {
+  if (phase === "probe") return "搜索";
+  if (phase === "search") return "加群";
+  if (phase === "join") return "结束";
+  if (phase === "pipeline") return "平台阶段";
+  return "—";
+}
+
+function cooldownReason(reason) {
+  if (reason === "collector_stalled") return "采集连续空结果";
+  return reason ? String(reason) : "冷却";
+}
+
+function computeStatus(live, receivedAt, now) {
+  now = now || Date.now();
+  const out = {
+    platform: "后台未连接", phase: "未知", pipeline: "未知", pipeMeta: "无整轮证据",
+    stage: "当前 — · 下一 —", cooldown: "", observed: "无观测", fresh: "断线",
+    freshKind: "bad", disconnected: true
+  };
+  if (!live) return out;
+  out.disconnected = false;
+
+  const running = !!live.running;
+  const active = live.activePlatform || "";
+  const pn = active || live.platform || "—";
+  const ph = live.phase || (running ? "running" : "idle");
+  out.platform = running ? pn + (active && active !== live.platform ? " · 执行中" : "") : pn;
+  out.phase = running ? stageLabel(ph) : (ph === "done" ? "已结束" : ph === "idle" ? "空闲" : stageLabel(ph));
+
+  const cur = running ? stageLabel(ph) : "—";
+  const nxt = running ? nextStageLabel(ph) : "—";
+  const task = live.current ? String(live.current) : "—";
+  out.stage = "当前：" + cur + "（" + task + "） · 下一：" + nxt;
+
+  const p = live.pipeline || null;
+  if (!p || p.state === "unknown" || !p.state) {
+    out.pipeline = "未知";
+    out.pipeMeta = (p && p.reason === "pipeline_status_invalid") ? "整轮状态不可读" : "无整轮证据";
+  } else {
+    const labels = { running: "运行中", complete: "已完成", failed: "失败", stopped: "已停止" };
+    out.pipeline = labels[p.state] || String(p.state);
+    const total = Number(p.total) || 0;
+    const done = Number(p.completed) || 0;
+    let meta = total ? (done + "/" + total + " 平台") : "";
+    if (p.current_platform) meta += (meta ? " · " : "") + String(p.current_platform);
+    if (p.next_platform) meta += " → " + String(p.next_platform);
+    const upd = Date.parse(p.updated_at || "");
+    if (p.state === "running" && isFinite(upd) && (now - upd > PIPELINE_STALE_SEC * 1000)) meta += " · 状态陈旧";
+    if (p.last_error) meta += " · " + String(p.last_error);
+    out.pipeMeta = meta || "—";
+  }
+
+  const cds = live.cooldowns || {};
+  const parts = [];
+  Object.keys(cds).forEach(function (k) {
+    const c = cds[k];
+    if (!c) return;
+    const until = Date.parse(c.until || "");
+    const rem = Number(c.remaining_sec);
+    const remText = isFinite(rem) && rem > 0 ? ("剩 " + Math.round(rem / 60) + " 分") : "剩余未知";
+    parts.push(k + " 冷却至 " + (isFinite(until) ? hhmmss(until) : "未知") + " · " + remText + " · " + cooldownReason(c.reason));
+  });
+  out.cooldown = parts.join("；");
+
+  if (!receivedAt) {
+    out.observed = "无观测";
+    out.fresh = "未知";
+    out.freshKind = "warn";
+  } else {
+    const age = Math.max(0, Math.round((now - receivedAt) / 1000));
+    out.observed = hhmmss(receivedAt) + " · " + age + " 秒前";
+    if (age > STATUS_STALE_SEC) {
+      out.fresh = "陈旧";
+      out.freshKind = "warn";
+    } else {
+      out.fresh = "新鲜";
+      out.freshKind = "ok";
+    }
+  }
+  return out;
+}
+
+function renderStatusBar(live, receivedAt) {
+  const s = computeStatus(live, receivedAt, Date.now());
+  const set = function (id, text, cls) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    if (cls !== undefined) el.className = cls;
+  };
+  set("stPlatform", s.platform, "sb-v");
+  set("stPhase", s.phase, "pill");
+  set("stPipeline", s.pipeline, "sb-v" + (s.pipeline === "未知" ? " warn" : ""));
+  set("stPipeMeta", s.pipeMeta, "sb-meta" + (s.pipeline === "未知" ? " warn" : ""));
+  set("stStage", s.stage, "sb-v");
+  set("stObserved", s.observed, "sb-v");
+  set("stFresh", s.fresh, "sb-meta " + s.freshKind);
+  const cd = document.getElementById("stCooldown");
+  if (cd) cd.textContent = s.cooldown;
+  const row = document.getElementById("stCooldownRow");
+  if (row) {
+    row.classList.toggle("hidden", !s.cooldown);
+    row.style.display = s.cooldown ? "" : "none";
+  }
+}
+
 async function refreshLive() {
   let d = null;
+  let at = 0;
   try {
     const r = await fetch(HUB + "/api/live", { cache: "no-store" });
-    if (r.ok) d = await r.json();
+    if (r.ok) { d = await r.json(); at = Date.now(); }
   } catch (e) {}
+  LIVE = d;
+  LIVE_AT = at;
+  renderStatusBar(d, at);
   const box = document.getElementById("livebox");
   if (!box) return;
   if (!d) {
@@ -261,6 +494,14 @@ async function refreshLive() {
     : '<li><span class="m">还没有事件</span></li>';
 }
 
+// 开始/停止：每个按钮只发一次请求，等待后台响应后再恢复；不自动重试
+(function () {
+  var s = document.getElementById("btnStart");
+  if (s) s.addEventListener("click", function () { requestStart(); });
+  var t = document.getElementById("btnStop");
+  if (t) t.addEventListener("click", function () { requestStop(); });
+})();
+
 // 「看板 ↗」：必须在扩展上下文里才能开标签页
 (function () {
   var b = document.getElementById("btnOpen");
@@ -280,6 +521,7 @@ setTimeout(refresh, 800);
 setTimeout(refresh, 2400);
 setInterval(refresh, 2000);
 setInterval(refreshLive, 2000);
+setInterval(function () { renderStatusBar(LIVE, LIVE_AT); }, 1000);
 setTimeout(refreshLive, 600);
 setInterval(() => { loadSummary().then(refresh); }, 15000);
 if (CTX_ALIVE) {

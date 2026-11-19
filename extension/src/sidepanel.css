@@ -1,4 +1,4 @@
-﻿*{box-sizing:border-box}
+*{box-sizing:border-box}
 body{margin:0;font:13px/1.5 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#1F2329;background:#fff}
 header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #EFF0F1}
 .brand{display:flex;align-items:center;gap:8px;font-weight:600}
@@ -25,6 +25,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .ico.fb{background:#1877F2}.ico.tg{background:#29A9EB}.ico.dc{background:#5865F2}
 .tag{margin-left:auto;font-size:10px;color:#8A9099;border:1px solid #EFF0F1;border-radius:99px;padding:0 6px}
 .actions{display:flex;gap:8px;padding:4px 12px 12px}
+.feedback{margin:0 12px 10px;padding:8px 10px;border-radius:8px;background:#F7F8FA;color:#646A73;font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-all}
+.feedback.ok{background:#E8F7E6;color:#2BA21C}
+.feedback.bad{background:#FFF1F0;color:#F54A45}
 .primary{flex:1;background:#3370FF;color:#fff;border:0;border-radius:8px;padding:9px;font-size:13px;cursor:pointer}
 .primary:hover{background:#2A5FE0}
 .plain{flex:0 0 84px;background:#fff;border:1px solid #DEE0E3;border-radius:8px;padding:9px;cursor:pointer;color:#646A73}
@@ -79,3 +82,15 @@ button:disabled{opacity:.5;cursor:default}
 .plats summary::after { content: "▸"; color: #9aa0a6; font-size: 11px; }
 .plats[open] summary::after { content: "▾"; }
 .plats .hint { font-size: 11px; color: #9aa0a6; font-weight: 400; margin-left: 6px; }
+
+/* --- status bar --- */
+.statusbar { margin: 0 12px 6px; padding: 8px 10px; border: 1px solid #EDEFF3; border-radius: 10px; background: #FBFCFD; }
+.sb-row { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; font-size: 12px; }
+.sb-k { flex: 0 0 34px; color: #9AA0A6; }
+.sb-v { flex: 1; min-width: 0; color: #1F2329; line-height: 1.5; word-break: break-all; }
+.sb-v.warn { color: #B26A00; }
+.sb-meta { color: #8A9099; font-size: 11px; }
+.sb-meta.ok { color: #2BA21C; }
+.sb-meta.warn { color: #B26A00; }
+.sb-meta.bad { color: #F54A45; }
+.feedback.warn { background: #FFF8EC; color: #A0670A; }
