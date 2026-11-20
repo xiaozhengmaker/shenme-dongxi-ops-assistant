@@ -9,7 +9,10 @@
 $ErrorActionPreference = "Stop"
 $baseDir = $PSScriptRoot
 . "$baseDir\lib\feishu.ps1"
-$baseDir = $PSScriptRoot
+. "$baseDir\lib\relevance.ps1"
+. "$baseDir\lib\stop.ps1"
+. "$baseDir\lib\run_control.ps1"
+if (Test-WorkerStop $baseDir) { Write-Host "stop signal"; exit 0 }
 
 $cfg = [System.IO.File]::ReadAllText("$baseDir\config.json", [System.Text.Encoding]::UTF8) | ConvertFrom-Json
 $todayMs = [DateTimeOffset]::new((Get-Date).Date).ToUnixTimeMilliseconds()
@@ -42,6 +45,7 @@ $seen = @{}
 $picked = New-Object System.Collections.ArrayList
 
 foreach ($k in $kw) {
+  if (Test-WorkerStop $baseDir) { Write-Host "stop signal"; exit 0 }
   if ($picked.Count -ge $MaxSubs) { break }
   $q = [uri]::EscapeDataString($k)
   GoUrl "https://www.reddit.com/search/?q=$q&type=sr" 6
@@ -54,7 +58,7 @@ foreach ($k in $kw) {
     $key = $n.ToLower()
     if ($seen.ContainsKey($key)) { continue }
     $seen[$key] = $true
-    $expr = "(async()=>{try{const r=await fetch('https://www.reddit.com/r/$n/about.json?raw_json=1',{credentials:'include'});const j=await r.json();const d=j.data||{};return JSON.stringify({s:d.subscribers,n:d.display_name,q:(d.public_description||'').replace(/\s+/g,' ').slice(0,50),o:d.over18,sub:!!d.user_is_subscriber});}catch(e){return JSON.stringify({err:e.message});}})()"
+    $expr = "(async()=>{try{const r=await fetch('https://www.reddit.com/r/$n/about.json?raw_json=1',{credentials:'include'});const j=await r.json();const d=j.data||{};return JSON.stringify({s:d.subscribers,n:d.display_name,q:(d.public_description||'').replace(/\s+/g,' ').slice(0,200),o:d.over18,sub:!!d.user_is_subscriber});}catch(e){return JSON.stringify({err:e.message});}})()"
     $ab = Invoke-Cdp "Runtime.evaluate" @{ expression = $expr; returnByValue = $true; awaitPromise = $true }
     if (-not $ab -or -not $ab.result.value) { continue }
     $info = $ab.result.value | ConvertFrom-Json
@@ -62,6 +66,7 @@ foreach ($k in $kw) {
     if ($info.o -eq $true) { Write-Host ("  skip18 " + $n); continue }
     if ([int]$info.s -lt $MinSubs) { continue }
     if ($info.sub) { Write-Host ("  already " + $n); continue }
+    if (-not (Test-Cs2SubredditRelevant -Name $n -Description ([string]$info.q))) { Write-Host ("  skip irrelevant " + $n); continue }
     [void]$picked.Add([pscustomobject]@{ name = $n; subs = [int]$info.s; desc = $info.q })
     $added++
     Write-Host ("  PICK " + $n + " subs=" + $info.s)
@@ -90,6 +95,7 @@ foreach ($p in $picked) {
   $authors = if ($sub) { @($sub.authors) } else { @() }
 
   # 2) 订阅
+  if (Test-WorkerStop $baseDir) { Write-Host "stop signal before subscribe"; exit 0 }
   $expr2 = "(async()=>{try{const me=await (await fetch('https://www.reddit.com/api/me.json?raw_json=1',{credentials:'include'})).json();const uh=me.data.modhash;const b=new URLSearchParams({uh:uh,action:'sub',sr_name:'$($p.name)',api_type:'json',skip_initial_defaults:'true'});const r=await fetch('https://www.reddit.com/api/subscribe',{method:'POST',credentials:'include',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b.toString()});await new Promise(s=>setTimeout(s,800));const ab=await (await fetch('https://www.reddit.com/r/$($p.name)/about.json?raw_json=1',{credentials:'include'})).json();return JSON.stringify({status:r.status,sub:!!ab.data.user_is_subscriber});}catch(e){return JSON.stringify({err:e.message});}})()"
   $sb = Invoke-Cdp "Runtime.evaluate" @{ expression = $expr2; returnByValue = $true; awaitPromise = $true }
   $joined = $false
@@ -127,8 +133,17 @@ foreach ($p in $picked) {
 }
 
 if ($records.Count -gt 0) {
-  Add-FsRecords -FieldSets $records.ToArray() | Out-Null
-  Write-Host ("feishu added=" + $records.Count)
+  $fsMap = @{}
+  try {
+    foreach ($fr in (Get-FsRecords)) {
+      $rv = $fr.fields."群组唯一键"; $rk = ""
+      if ($rv -is [string]) { $rk = $rv } elseif ($rv -and $rv.text) { $rk = [string]$rv.text }
+      if ($rk) { $fsMap[$rk] = $fr.record_id }
+    }
+  } catch { Write-Host ("  feishu read skipped: " + $_.Exception.Message) }
+  $fsAdded = 0
+  foreach ($rec in $records) { if (Add-FsRecordOnce -Fields $rec -Cache $fsMap) { $fsAdded++ } }
+  Write-Host ("feishu added=" + $fsAdded + " total=" + $records.Count)
 }
 if ($userRows.Count -gt 0) {
   $csv = "$baseDir\data\users.csv"

@@ -22,6 +22,17 @@ async function hubFetch(path, opts) {
   }
 }
 
+async function hubControl(action, extra) {
+  const body = Object.assign({ action: action }, extra || {});
+  const res = await hubFetch("/control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok || (data && data.ok === false)) {
+    return { ok: false, error: (data && data.error) || ("http_" + res.status), detail: (data && data.detail) || "" };
+  }
+  return { ok: true, data: data };
+}
+
 async function findTab(platform) {
   const pf = String(platform || "").toLowerCase();
   const key = pf === "facebook" ? "facebook.com"
@@ -138,7 +149,7 @@ function pageJoin(p) {
       if (m.indexOf("USER_ALREADY_PARTICIPANT") >= 0) v = "already";
       else if (m.indexOf("INVITE_REQUEST_SENT") >= 0) v = "request_sent";
       else if (m.indexOf("FLOOD_WAIT") >= 0) v = "flood";
-      window.__dshRes = JSON.stringify({ ok: true, v });
+      window.__dshRes = JSON.stringify({ ok: true, v, e: (v.indexOf("err:") === 0 ? m : "") });
     }
   })().catch(e => { window.__dshRes = JSON.stringify({ ok: false, e: String(e && e.message || e) }); });
 }
@@ -230,16 +241,26 @@ async function tick() {
     if (task.action === "join") {
       if (String(task.platform || "").toLowerCase() === "facebook") {
         if (task.q) {
-          await chrome.tabs.update(tab.id, { url: "https://www.facebook.com/search/groups/?q=" + encodeURIComponent(task.q) });
+          try { await chrome.tabs.update(tab.id, { url: "https://www.facebook.com/search/groups/?q=" + encodeURIComponent(task.q), active: true }); } catch (_) { await chrome.tabs.update(tab.id, { url: "https://www.facebook.com/search/groups/?q=" + encodeURIComponent(task.q) }); }
+          try { await chrome.windows.update(tab.windowId, { focused: true }); } catch (_) {}
           await waitTab(tab.id, 20000);
           await sleep(5000);
         } else {
           // 池化直加的候选来自「发现页」，必须先回到发现页再找卡片，否则注定 not_found
-          await chrome.tabs.update(tab.id, { url: "https://www.facebook.com/groups/discover/" });
+          try { await chrome.tabs.update(tab.id, { url: "https://www.facebook.com/groups/discover/", active: true }); } catch (_) { await chrome.tabs.update(tab.id, { url: "https://www.facebook.com/groups/discover/" }); }
+          try { await chrome.windows.update(tab.windowId, { focused: true }); } catch (_) {}
           await waitTab(tab.id, 25000);
           await sleep(4500);
         }
-        await injectAndWait(tab.id, pageFBJoin, [{ id: task.chatId, title: task.title }]);
+        if (task.navUrl) {
+          try { await chrome.tabs.update(tab.id, { url: task.navUrl, active: true }); } catch (_) { await chrome.tabs.update(tab.id, { url: task.navUrl }); }
+          try { await chrome.windows.update(tab.windowId, { focused: true }); } catch (_) {}
+          await waitTab(tab.id, 25000);
+          await sleep(3500);
+          await injectAndWait(tab.id, pageFBJoinDirect, [{ id: task.chatId, title: task.title }]);
+        } else {
+          await injectAndWait(tab.id, pageFBJoin, [{ id: task.chatId, title: task.title }]);
+        }
       } else {
         await injectAndWait(tab.id, pageJoin, [{ u: task.u, id: task.chatId, self: task.self }]);
       }
@@ -460,14 +481,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === "start") {
     (async () => {
       try {
-        const res = await hubFetch("/control", { method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "start" }) });
-        let data = {};
-        try { data = await res.json(); } catch (e) {}
-        if (!res.ok || (data && data.ok === false)) {
-          sendResponse({ ok: false, error: (data && data.error) || ("http_" + res.status), detail: (data && data.detail) || "" });
-          return;
-        }
+        const r = await hubControl("start", { source: "ui" });
+        if (!r.ok) { sendResponse({ ok: false, error: r.error, detail: r.detail }); return; }
         await setState({ running: true, stats: { joined: 0, failed: 0, skipped: 0 } });
         ensureAlarm();
         tick();
@@ -478,20 +493,93 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     })();
     return true;
   }
-  if (msg && msg.type === "stop") {
+  if (msg && msg.type === "members_start") {
     (async () => {
       try {
-        const res = await hubFetch("/control", { method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "stop" }) });
-        let data = {};
-        try { data = await res.json(); } catch (e) {}
-        if (!res.ok || (data && data.ok === false)) {
-          sendResponse({ ok: false, error: (data && data.error) || ("http_" + res.status), detail: (data && data.detail) || "" });
-          return;
-        }
+        const r = await hubControl("members_start", { platform: msg.platform || "", target: msg.target || "", trial: !!msg.trial });
+        if (!r.ok) { sendResponse({ ok: false, error: r.error, detail: r.detail }); return; }
+        sendResponse({ ok: true, data: r.data });
+      } catch (e) {
+        sendResponse({ ok: false, error: "hub_unreachable", detail: String((e && e.message) || e) });
+      }
+    })();
+    return true;
+  }
+  if (msg && msg.type === "members_stop") {
+    (async () => {
+      try {
+        const r = await hubControl("members_stop", { platform: msg.platform || "" });
+        if (!r.ok) { sendResponse({ ok: false, error: r.error, detail: r.detail }); return; }
+        sendResponse({ ok: true, data: r.data });
+      } catch (e) {
+        sendResponse({ ok: false, error: "hub_unreachable", detail: String((e && e.message) || e) });
+      }
+    })();
+    return true;
+  }
+  if (msg && msg.type === "stop_run") {
+    (async () => {
+      try {
+        const r = await hubControl("round_stop", { run_id: msg.run_id || "" });
+        if (!r.ok) { sendResponse({ ok: false, error: r.error, detail: r.detail }); return; }
         await setState({ running: false });
         stopLoop();
-        sendResponse({ ok: true });
+        sendResponse({ ok: true, data: r.data });
+      } catch (e) {
+        sendResponse({ ok: false, error: "hub_unreachable", detail: String((e && e.message) || e) });
+      }
+    })();
+    return true;
+  }
+  if (msg && msg.type === "skip_platform") {
+    (async () => {
+      try {
+        const r = await hubControl("skip_platform", { run_id: msg.run_id || "", platform: msg.platform || "" });
+        if (!r.ok) { sendResponse({ ok: false, error: r.error, detail: r.detail }); return; }
+        await setState({ running: false });
+        stopLoop();
+        sendResponse({ ok: true, data: r.data });
+      } catch (e) {
+        sendResponse({ ok: false, error: "hub_unreachable", detail: String((e && e.message) || e) });
+      }
+    })();
+    return true;
+  }
+  if (msg && msg.type === "emergency_stop") {
+    (async () => {
+      try {
+        const r = await hubControl("stop", { run_id: msg.run_id || "" });
+        if (!r.ok) { sendResponse({ ok: false, error: r.error, detail: r.detail }); return; }
+        await setState({ running: false });
+        stopLoop();
+        sendResponse({ ok: true, data: r.data });
+      } catch (e) {
+        sendResponse({ ok: false, error: "hub_unreachable", detail: String((e && e.message) || e) });
+      }
+    })();
+    return true;
+  }
+  if (msg && msg.type === "clear_stop") {
+    (async () => {
+      try {
+        const r = await hubControl("clear_stop", { });
+        if (!r.ok) { sendResponse({ ok: false, error: r.error, detail: r.detail }); return; }
+        sendResponse({ ok: true, data: r.data });
+      } catch (e) {
+        sendResponse({ ok: false, error: "hub_unreachable", detail: String((e && e.message) || e) });
+      }
+    })();
+    return true;
+  }
+  if (msg && msg.type === "stop") {
+    // Legacy message -> emergency stop.
+    (async () => {
+      try {
+        const r = await hubControl("stop", { run_id: msg.run_id || "" });
+        if (!r.ok) { sendResponse({ ok: false, error: r.error, detail: r.detail }); return; }
+        await setState({ running: false });
+        stopLoop();
+        sendResponse({ ok: true, data: r.data });
       } catch (e) {
         sendResponse({ ok: false, error: "hub_unreachable", detail: String((e && e.message) || e) });
       }
@@ -614,44 +702,316 @@ function pageFBFilter() {
   window.__dshRes = JSON.stringify({ ok: true, v: res });
 }
 
-// 点某个群的「加入」，2.6 秒后判断结果
+// 只对「已确认是目标群」的页面主区域操作；目标不明/无目标按钮/已待审批 => 零点击
+function pageFBJoinDirect(arg) {
+  const done = (v, e) => { window.__dshRes = JSON.stringify({ ok: v !== "err", v, e: e || "" }); };
+  const norm = s => String(s || "").replace(/\s+/g, " ").trim();
+  const want = norm(arg && arg.id);
+  const title = norm(arg && arg.title).toLowerCase();
+  const label = b => norm(b.innerText);
+  const clickables = root => [...root.querySelectorAll('a, div[role="button"], span[role="button"]')];
+  const mainEl = () => document.querySelector('[role="main"]');
+  // 精确取 /groups/<segment>；/groups/1234 不能匹配目标 123
+  const segOf = href => {
+    const s = String(href || "");
+    const p = s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "").split(/[?#]/)[0];
+    const m = p.match(/^\/groups\/([^/]+)(?:\/|$)/);
+    if (!m) return "";
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  };
+  const pendingRe = /(已申请|取消申请|取消请求|Requested|Pending|Request sent|Cancel request)/i;
+  const joinedRe = /(已加入|Joined)/i;
+  const joinRe = /^(加入小组|加入|Join group|Join)$/i;
+  const requestJoinRe = /^(Request to join|申请加入|请求加入)$/i;
+  const visitRe = /^(访问|Visit)$/i;
+  const recRe = /(推荐小组|推荐|Suggested for you|Suggested|People you may)/i;
+  const segsIn = root => [...root.querySelectorAll('a[href*="/groups/"]')]
+    .map(a => segOf(a.getAttribute("href") || "")).filter(Boolean);
+  // 可核验的目标群头部：标题匹配 + 同一头部范围内出现目标动作行；
+  // 成员数所在浅层容器不够，必须向上找到包含动作行的共同祖先；推荐/异群祖先一律排除。
+  const inForeignLink = b => {
+    let el = b;
+    for (let i = 0; i < 4 && el; i++) {
+      const href = el.getAttribute && el.getAttribute("href");
+      if (href) { const s = segOf(href); if (s && s !== want) return true; }
+      el = el.parentElement;
+    }
+    return false;
+  };
+  const inRec = b => {
+    let el = b;
+    for (let i = 0; i < 10 && el; i++) {
+      if (el.getAttribute && el.getAttribute("role") === "main") break;
+      const tx = norm(el.innerText);
+      if (recRe.test(tx) || isArticle(el)) return true;
+      el = el.parentElement;
+    }
+    return false;
+  };
+  const safeActs = root => clickables(root).filter(b => !inForeignLink(b) && !inRec(b));
+  const actionIn = root => {
+    const tx = norm(root.innerText);
+    if (pendingRe.test(tx) || joinedRe.test(tx) || /Request to join|申请加入/i.test(tx)) return true;
+    return safeActs(root).some(b => joinRe.test(label(b)) || visitRe.test(label(b)) || requestJoinRe.test(label(b)) || pendingRe.test(label(b)) || joinedRe.test(label(b)));
+  };
+  const targetActions = root => safeActs(root).filter(b => {
+    const t = label(b);
+    return joinRe.test(t) || visitRe.test(t) || requestJoinRe.test(t);
+  });
+  const isNumSeg = s => /^\d+$/.test(String(s || ""));
+  // 标题+成员数块（tb）是目标身份证据；块内允许出现异群链接，但 numeric alias
+  // 必须唯一。URL 若为 numeric，只有这里能证明它属于同一个目标。
+  const titleInfo = m => {
+    if (!title) return null;
+    const hs = [...m.querySelectorAll('h1, h2, h3, [role="heading"]')];
+    for (const h of hs) {
+      const ht = norm(h.innerText).toLowerCase();
+      if (!ht) continue;
+      if (ht !== title && ht.indexOf(title) === -1) continue;
+      let el = h, tb = null;
+      for (let i = 0; i < 6 && el && el !== m; i++) {
+        const tx = norm(el.innerText);
+        if (tx.length > 1500 || recRe.test(tx) || isArticle(el)) break;
+        if (/(位成员|members)/i.test(tx)) { tb = el; break; }
+        el = el.parentElement;
+      }
+      if (!tb) {
+        // 简化页面可能没有成员数：只接受 h1 的直接父容器，且动作就在其中。
+        const hp = h.parentElement;
+        if (hp && hp !== m && !recRe.test(norm(hp.innerText)) && !isArticle(hp) && actionIn(hp)) {
+          const segs = [...new Set(segsIn(hp))];
+          const nums = segs.filter(isNumSeg);
+          const al = nums.length === 1 ? nums[0] : "";
+          const foreign = segs.some(s => s !== want && s !== al);
+          if (!foreign) return { h, tb: hp, alias: al, foreign: false, simple: true };
+        }
+        continue;
+      }
+      const segs = [...new Set(segsIn(tb))];
+      const nums = segs.filter(isNumSeg);
+      const al = nums.length === 1 ? nums[0] : "";
+      return { h, tb, alias: al, foreign: segs.some(s => s !== want && s !== al), simple: false };
+    }
+    return null;
+  };
+  // 从 title 块向上最多 8 层，取“最小且唯一动作”的头部祖先。
+  // 异群/推荐/帖子动作都过滤；有两个候选动作即视为不确定，零点击。
+  // pending 只在“强 pending 文案”或“title 块无异群链接时的取消按钮”上成立，
+  // 避免把只有取消请求、但标题块混入异群链接的页面误判为目标待审批。
+  const pendingStrongRe = /(已申请|取消申请|请求已发送|Request sent|Requested|Pending)/i;
+  const headerInfo = (m, ti) => {
+    if (!ti) return null;
+    let el = ti.tb, visited = null;
+    for (let i = 0; i < 8 && el && el !== m; i++) {
+      const tx = norm(el.innerText);
+      if (tx.length > 2000 || recRe.test(tx) || isArticle(el)) break;
+      const hasCancel = safeActs(el).some(b => cancelRe.test(label(b)));
+      if (pendingStrongRe.test(tx) || (hasCancel && !ti.foreign)) return { hc: el, kind: "pending", alias: ti.alias };
+      if (joinedRe.test(tx)) return { hc: el, kind: "joined", alias: ti.alias };
+      const acts = targetActions(el);
+      if (acts.length > 1) {
+        if (acts.every(b => requestJoinRe.test(label(b)))) return { hc: el, kind: "approval", alias: ti.alias };
+        return null;
+      }
+      if (acts.length === 1) {
+        const b = acts[0], lb = label(b);
+        if (joinRe.test(lb)) return { hc: el, join: b, alias: ti.alias };
+        if (requestJoinRe.test(lb)) return { hc: el, kind: "approval", alias: ti.alias };
+        if (visitRe.test(lb) && !visited) visited = { hc: el, kind: "visited", alias: ti.alias };
+      }
+      el = el.parentElement;
+    }
+    if (!ti.foreign) return { hc: ti.tb, alias: ti.alias };
+    return visited;
+  };
+  // 只读的 target-pending 识别：真实页面把「你的加入请求待审核」放在头部横幅，
+  // 取消请求在标题行之外的兄弟行；标题+成员数块还可能含异群链接。
+  // 必须同时满足：唯一匹配标题的 h1 + 目标头部范围内的待审横幅 + 对应取消按钮。
+  // 只在目标 header 祖先容器内确认，推荐卡/帖子容器一律拒绝；绝不点击任何按钮。
+  const bannerRe = /(你的加入请求待审核|加入请求待审核|Your join request is pending|Join request pending)/i;
+  const cancelRe = /^(取消请求|Cancel request|取消申请)$/i;
+  const isArticle = el => {
+    try {
+      if (el.getAttribute && el.getAttribute("role") === "article") return true;
+      return el.querySelectorAll && el.querySelectorAll('[role="article"]').length > 0;
+    } catch (e) { return true; }
+  };
+  const pendingCtx = m => {
+    if (!title) return null;
+    const hs = [...m.querySelectorAll('h1')].filter(h => {
+      const ht = norm(h.innerText).toLowerCase();
+      return ht && (ht === title || ht.indexOf(title) !== -1);
+    });
+    if (hs.length !== 1) return null;
+    const h = hs[0];
+    const cands = [...m.querySelectorAll('div,span')].filter(el => bannerRe.test(el.innerText || ""));
+    for (const b of cands) {
+      let el = b.parentElement;
+      for (let i = 0; i < 10 && el && el !== m; i++) {
+        const tx = norm(el.innerText);
+        if (tx.length > 1200) break;
+        if (recRe.test(tx)) break;
+        if (isArticle(el)) break;
+        const hasHeading = [...el.querySelectorAll('h1')].indexOf(h) !== -1;
+        const hasCancel = clickables(el).some(x => cancelRe.test(label(x)));
+        if (hasHeading && hasCancel) return el;
+        el = el.parentElement;
+      }
+    }
+    return null;
+  };
+  let tries = 0;
+  const step = () => {
+    if (!want) { done("not_found", "target_unknown"); return; }
+    const m = mainEl();
+    if (!m) {
+      tries++;
+      if (tries > 8) { done("not_found", "target_main_missing"); return; }
+      setTimeout(step, 1000); return;
+    }
+    const ti = titleInfo(m);
+    const cur = segOf(location.href);
+    if (cur !== want) {
+      const aliasOk = isNumSeg(cur) && ti && ti.alias && cur === ti.alias;
+      if (!aliasOk) {
+        tries++;
+        if (tries > 8) { done("not_found", "target_url_mismatch"); return; }
+        setTimeout(step, 1000); return;
+      }
+    }
+    const pc = pendingCtx(m);
+    if (pc) { done("request_sent", "pending_no_click"); return; }
+    const hi = headerInfo(m, ti);
+    if (!hi) {
+      tries++;
+      if (tries > 6) { done("not_found", cur !== want ? "target_url_mismatch" : "no_target_header"); return; }
+      setTimeout(step, 900); return;
+    }
+    const hc = hi.hc;
+    const txt = norm(hc.innerText);
+    if (hi.kind === "pending") { done("request_sent", "pending_no_click"); return; }
+    if (hi.kind === "joined" || joinedRe.test(txt)) { done("already", "already_member"); return; }
+    if (hi.kind === "approval" || /Request to join|申请加入/i.test(txt)) { done("approval", "request_to_join_no_click"); return; }
+    if (/非公开|Private group/i.test(txt)) { done("approval", "private_group"); return; }
+    const join = hi.join;
+    if (!join) {
+      if (hi.kind === "visited" || safeActs(hc).some(b => visitRe.test(label(b)))) { done("visited", "member_visit_only"); return; }
+      tries++;
+      if (tries > 6) { done("not_found", "no_join_on_target_header"); return; }
+      setTimeout(step, 900); return;
+    }
+    try { join.click(); } catch (e) { done("err", "click_failed"); return; }
+    let wait = 0;
+    const verify = () => {
+      wait++;
+      const dl = [...document.querySelectorAll('div[role="dialog"]')];
+      for (const d of dl) {
+        const dt = (d.innerText || "");
+        if (/(加入小组|问题|Questions|回答|Submit|提交)/i.test(dt) && dt.length > 10) {
+          const c = [...d.querySelectorAll('div[role="button"],a')].find(b => /^(关闭|Close|取消|Cancel)$/i.test(label(b)));
+          if (c) { try { c.click(); } catch (e) {} }
+          done("approval", "question_dialog");
+          return;
+        }
+      }
+      if (pendingCtx(m)) { done("request_sent", "request_sent"); return; }
+      const ti2 = titleInfo(m), hi2 = headerInfo(m, ti2);
+      const curHi = hi2 || { hc: hc };
+      const t2 = norm(curHi.hc.innerText);
+      if (hi2 && hi2.kind === "pending") { done("request_sent", "request_sent"); return; }
+      if (hi2 && hi2.kind === "approval" || /Request to join|申请加入/i.test(t2)) { done("approval", "request_to_join_no_click"); return; }
+      if (hi2 && hi2.kind === "joined" || joinedRe.test(t2)) { done("joined", "joined_by_page"); return; }
+      if (hi2 && hi2.kind === "visited" || safeActs(curHi.hc).some(b => visitRe.test(label(b)))) { done("visited", "member_visit_only"); return; }
+      if (wait > 10) { done("unknown", "no_state_change"); return; }
+      setTimeout(verify, 900);
+    };
+    setTimeout(verify, 1400);
+  };
+  step();
+}
+
 function pageFBJoin(arg) {
   const done = (v, e) => { window.__dshRes = JSON.stringify({ ok: v !== "err", v, e: e || "" }); };
-  const want = String(arg.id || "");
-  const label = b => (b.innerText || "").replace(/\s+/g, " ").trim();
+  const norm = s => String(s || "").replace(/\s+/g, " ").trim();
+  const want = norm(arg && arg.id);
+  const title = norm(arg && arg.title).toLowerCase();
+  const label = b => norm(b.innerText);
   const clickables = root => [...root.querySelectorAll('a, div[role="button"], span[role="button"]')];
+  // 精确取 /groups/<segment>；/groups/1111 不能匹配目标 111
+  const segOf = href => {
+    const s = String(href || "");
+    const p = s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "").split(/[?#]/)[0];
+    const m = p.match(/^\/groups\/([^/]+)(?:\/|$)/);
+    if (!m) return "";
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  };
+  const pendingRe = /(已申请|取消申请|取消请求|Requested|Pending|Request sent|Cancel request)/i;
+  const joinedRe = /(已加入|Joined)/i;
+  const joinRe = /^(加入小组|加入|Join group|Join)$/i;
+  const requestJoinRe = /^(Request to join|申请加入|请求加入)$/i;
+  const visitRe = /^(访问|Visit)$/i;
+  const recRe = /(推荐小组|推荐|Suggested for you|Suggested|People you may)/i;
+  const actionIn = root => {
+    const tx = norm(root.innerText);
+    if (pendingRe.test(tx) || joinedRe.test(tx) || /Request to join|申请加入/i.test(tx)) return true;
+    return clickables(root).some(b => joinRe.test(label(b)) || visitRe.test(label(b)) || requestJoinRe.test(label(b)) || pendingRe.test(label(b)) || joinedRe.test(label(b)));
+  };
   let tries = 0;
 
+  // 成员数可能在浅层标题行，取消请求/已加入在兄弟动作行，必须向上找到含动作行的共同祖先。
+  const findTargetCard = () => {
+    const as = [...document.querySelectorAll('a[href*="/groups/"]')];
+    for (const a of as) {
+      if (segOf(a.getAttribute("href") || "") !== want) continue;
+      let el = a, fallback = null;
+      for (let i = 0; i < 12; i++) {
+        el = el.parentElement; if (!el) break;
+        const tx = norm(el.innerText);
+        if (tx.length <= 20 || tx.length >= 800) continue;
+        if (!/(位成员|members)/i.test(tx)) continue;
+        const segs = [...el.querySelectorAll('a[href*="/groups/"]')]
+          .map(x => segOf(x.getAttribute("href") || "")).filter(Boolean);
+        const uniq = [...new Set(segs)];
+        if (uniq.length !== 1 || uniq[0] !== want) continue;
+        if (title && tx.toLowerCase().indexOf(title) === -1) continue;
+        if (!fallback) fallback = el;
+        if (recRe.test(tx)) break;
+        if (actionIn(el)) return el;
+      }
+      if (fallback) return fallback;
+    }
+    return null;
+  };
+  // 旧版仅取首个成员数容器，保留对照，不再调用。
+  // 卡片必须：精确群 ID、单一群 ID、成员数、标题可核验（若有标题）
   const findCard = () => {
     const as = [...document.querySelectorAll('a[href*="/groups/"]')];
     for (const a of as) {
       const h = a.getAttribute("href") || "";
-      if (!want || h.indexOf("/groups/" + want) === -1) continue;
-      let el = a, card = null;
+      if (segOf(h) !== want) continue;
+      let el = a;
       for (let i = 0; i < 10; i++) {
         el = el.parentElement; if (!el) break;
-        const tx = el.innerText || "";
-        if (tx.length > 20 && tx.length < 800 && /(位成员|members)/i.test(tx)) { card = el; break; }
+        const tx = norm(el.innerText);
+        if (tx.length <= 20 || tx.length >= 800) continue;
+        if (!/(位成员|members)/i.test(tx)) continue;
+        const segs = [...el.querySelectorAll('a[href*="/groups/"]')]
+          .map(x => segOf(x.getAttribute("href") || "")).filter(Boolean);
+        const uniq = [...new Set(segs)];
+        if (uniq.length !== 1 || uniq[0] !== want) continue;
+        if (title && tx.toLowerCase().indexOf(title) === -1) continue;
+        return el;
       }
-      if (card) return card;
     }
     return null;
   };
 
-  const findJoin = card => {
-    let box = card;
-    for (let k = 0; k < 6; k++) {
-      const j = clickables(box).find(b => /^(加入小组|加入|Join group|Join)$/i.test(label(b)));
-      if (j) return j;
-      if (!box.parentElement) break;
-      box = box.parentElement;
-    }
-    return null;
-  };
+  const findJoin = card => clickables(card).find(b => joinRe.test(label(b))) || null;
 
   let tops = 0;
   const step = () => {
-    const card = findCard();
+    if (!want) { done("not_found", "target_unknown"); return; }
+    const card = findTargetCard();
     if (!card) {
       tries++;
       if (tries === 1) { window.scrollTo(0, 0); setTimeout(step, 700); return; }
@@ -663,12 +1023,19 @@ function pageFBJoin(arg) {
       setTimeout(step, 900);
       return;
     }
-    const txt = card.innerText || "";
-    if (/非公开|Private group/.test(txt)) { done("approval", "private_group"); return; }
+    const txt = norm(card.innerText);
+    if (pendingRe.test(txt)) { done("request_sent", "pending_no_click"); return; } if (/非公开|Private group/i.test(txt)) { done("approval", "private_group"); return; }
+    if (pendingRe.test(txt)) { done("request_sent", "pending_no_click"); return; }
+    if (joinedRe.test(txt)) { done("already", "already_member"); return; }
+    // Request to join / 申请加入 是待审批入口，不是可直接点击的加入按钮
+    if (/Request to join|申请加入/i.test(txt)) { done("approval", "request_to_join_no_click"); return; }
+    const acts = clickables(card);
+    if (acts.some(b => requestJoinRe.test(label(b)))) { done("approval", "request_to_join_no_click"); return; }
     const jb = findJoin(card);
     if (!jb) {
-      const boxText = ((card.parentElement && card.parentElement.innerText) || "") + " " + txt;
-      done(/已加入|Joined|访问|Visit/.test(boxText) ? "already" : "not_found", "no_join_button");
+      // 不在卡片外层找按钮：外层可能是别的推荐小组
+      if (/(访问|Visit)/.test(txt)) { done("visited", "member_visit_only"); return; }
+      done("not_found", "no_join_in_target_card");
       return;
     }
     try { jb.click(); } catch (e) { done("err", "click_failed"); return; }
@@ -680,15 +1047,18 @@ function pageFBJoin(arg) {
       for (const d of dlgs) {
         const dt = (d.innerText || "");
         if (/(加入小组|问题|Questions|回答|Submit|提交)/i.test(dt) && dt.length > 10) {
-          const closeBtn = [...d.querySelectorAll('div[role="button"],a')].find(b => /^(关闭|Close|取消|Cancel)$/i.test((b.innerText || "").trim()));
+          const closeBtn = [...d.querySelectorAll('div[role="button"],a')].find(b => /^(关闭|Close|取消|Cancel)$/i.test(label(b)));
           if (closeBtn) { try { closeBtn.click(); } catch (e) {} }
           done("approval", "question_dialog");
           return;
         }
       }
-      const now = ((card.innerText || "") + " " + ((card.parentElement && card.parentElement.innerText) || ""));
-      if (/已加入|Joined|已申请|取消申请|访问|Visit/.test(now)) { done("joined", ""); return; }
-      if (wait > 14) { done("pending", "no_state_change"); return; }
+      const now = norm(card.innerText);
+      if (/Request to join|申请加入/i.test(now)) { done("approval", "request_to_join_no_click"); return; }
+      if (joinedRe.test(now)) { done("joined", "joined_by_page"); return; }
+      if (pendingRe.test(now)) { done("request_sent", "request_sent"); return; }
+      if (/(访问|Visit)/.test(now)) { done("visited", "member_visit_only"); return; }
+      if (wait > 14) { done("unknown", "no_state_change"); return; }
       setTimeout(verify, 1500);
     };
     setTimeout(verify, 1600);

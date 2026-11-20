@@ -8,7 +8,7 @@ function showDeadContext() {
     box.classList.remove("hidden");
     box.innerHTML = "<b>扩展刚更新过，这个页面已失效</b><p>请关闭这个侧边栏再重新打开（或刷新此标签页），按钮才会恢复。</p>";
   }
-  ["btnStart", "btnStop", "btnCopy"].forEach(function (id) {
+  ["btnStart", "btnStop", "btnSkip", "btnEmergency", "btnRecover", "btnCopy"].forEach(function (id) {
     const el = document.getElementById(id);
     if (el) { el.disabled = true; el.style.opacity = "0.5"; }
   });
@@ -18,6 +18,7 @@ function showDeadContext() {
 
 const HUB = "http://127.0.0.1:8787";
 var START_TIMEOUT_MS = 15000;
+var STOP_TIMEOUT_MS = 10000;
 const STATUS_STALE_SEC = 20;
 const PIPELINE_STALE_SEC = 120;
 const $ = (s) => document.querySelector(s);
@@ -45,13 +46,20 @@ function friendlyError(r) {
   if (code === "cooldown") return "该平台冷却中";
   if (code === "empty_response") return "后台无响应";
   if (code === "timeout_pending") return "请求超时，结果待确认";
+  if (code === "idle") return "当前没有运行中的整轮";
+  if (code === "stale_run") return "该轮已变化，请刷新后重试";
+  if (code === "stale_platform") return "当前平台已变化，请刷新后重试";
+  if (code === "run_active") return "已有整轮在运行";
+  if (code === "unknown_stop_marker") return "急停标记不是已知 hub 生成，拒绝自动清除";
+  if (code === "absent") return "没有急停标记";
   return code;
 }
 
-async function sendOnce(type) {
+async function sendOnce(type, extra) {
   if (!ctxAlive()) return { ok: false, error: "context_dead" };
   try {
-    const r = await chrome.runtime.sendMessage({ type: type });
+    const msg = Object.assign({ type: type }, extra || {});
+    const r = await chrome.runtime.sendMessage(msg);
     return r || { ok: false, error: "empty_response" };
   } catch (e) {
     return { ok: false, error: "disconnected", detail: String((e && e.message) || e) };
@@ -60,7 +68,7 @@ async function sendOnce(type) {
 
 // Start may need to wait for hub; never resend on timeout, mark the result as
 // pending confirmation instead. Stop stays the normal single request path.
-function sendWithTimeout(type, ms) {
+function sendWithTimeout(type, ms, extra) {
   return new Promise(function (resolve) {
     let settled = false;
     const timer = setTimeout(function () {
@@ -68,7 +76,7 @@ function sendWithTimeout(type, ms) {
       settled = true;
       resolve({ ok: false, error: "timeout_pending" });
     }, ms);
-    sendOnce(type).then(function (r) {
+    sendOnce(type, extra).then(function (r) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -86,8 +94,31 @@ function setRunBusy(b) {
   RUN_BUSY = !!b;
   const s = document.getElementById("btnStart");
   const t = document.getElementById("btnStop");
+  const k = document.getElementById("btnSkip");
+  const r = document.getElementById("btnRecover");
   if (s) s.disabled = RUN_BUSY;
   if (t) t.disabled = RUN_BUSY;
+  if (k) k.disabled = RUN_BUSY;
+  if (r) r.disabled = RUN_BUSY || !stopFlagKnown();
+  // 急停必须始终可达；不因请求进行中被禁用。
+  const e = document.getElementById("btnEmergency");
+  if (e) e.disabled = false;
+}
+
+function stopFlagKnown() {
+  return !!(LIVE && LIVE.stopFlag && LIVE.stopFlag.present);
+}
+
+function currentRunId() {
+  if (LIVE && LIVE.pipeline && LIVE.pipeline.run_id) return String(LIVE.pipeline.run_id);
+  if (LIVE && LIVE.runControl && LIVE.runControl.run_id) return String(LIVE.runControl.run_id);
+  return "";
+}
+
+function currentPlatform() {
+  if (LIVE && LIVE.pipeline && LIVE.pipeline.current_platform) return String(LIVE.pipeline.current_platform);
+  if (LIVE && LIVE.activeLive && LIVE.activePlatform) return String(LIVE.activePlatform);
+  return "";
 }
 
 async function requestStart() {
@@ -112,14 +143,60 @@ async function requestStart() {
 async function requestStop() {
   if (RUN_BUSY) return;
   setRunBusy(true);
-  showFeedback("正在请求停止…", "");
+  showFeedback("正在请求停止本轮…", "");
   let r = null;
-  try { r = await sendOnce("stop"); } catch (e) { r = { ok: false, error: "disconnected" }; }
+  try { r = await sendWithTimeout("stop_run", STOP_TIMEOUT_MS, { run_id: currentRunId() }); } catch (e) { r = { ok: false, error: "disconnected" }; }
   if (!r || !r.ok) {
-    showFeedback("停止失败：" + friendlyError(r), "bad");
+    if (r && r.error === "timeout_pending") {
+      showFeedback("停止请求超时，结果待确认（未自动重发）", "warn");
+    } else {
+      showFeedback("停止失败：" + friendlyError(r), "bad");
+    }
   } else {
-    showFeedback("已请求停止", "ok");
+    // 只结束本轮；不写全局急停。外部 worker 可能仍在完成已发出的动作。
+    showFeedback("已请求停止本轮，等待 worker 确认", "ok");
   }
+  setRunBusy(false);
+  try { await refresh(); } catch (e) {}
+}
+
+async function requestSkip() {
+  if (RUN_BUSY) return;
+  const platform = currentPlatform();
+  if (!platform) { showFeedback("当前没有可跳过的平台", "warn"); return; }
+  setRunBusy(true);
+  showFeedback("正在请求跳过 " + platform + "…", "");
+  let r = null;
+  try { r = await sendWithTimeout("skip_platform", STOP_TIMEOUT_MS, { run_id: currentRunId(), platform: platform }); } catch (e) { r = { ok: false, error: "disconnected" }; }
+  if (!r || !r.ok) {
+    if (r && r.error === "timeout_pending") showFeedback("跳过请求超时，结果待确认（未自动重发）", "warn");
+    else showFeedback("跳过失败：" + friendlyError(r), "bad");
+  } else {
+    showFeedback("已请求跳过 " + platform + "，确认退出后继续下一平台", "ok");
+  }
+  setRunBusy(false);
+  try { await refresh(); } catch (e) {}
+}
+
+async function requestEmergencyStop() {
+  if (!ctxAlive()) { showFeedback("扩展已失效", "bad"); return; }
+  showFeedback("正在发送全局急停…", "");
+  let r = null;
+  try { r = await sendWithTimeout("emergency_stop", STOP_TIMEOUT_MS, { run_id: currentRunId() }); } catch (e) { r = { ok: false, error: "disconnected" }; }
+  if (!r || !r.ok) showFeedback("全局急停失败：" + friendlyError(r), "bad");
+  else showFeedback("已写入全局急停标记（独立于普通停止）", "ok");
+  try { await refresh(); } catch (e) {}
+}
+
+async function requestClearStop() {
+  if (RUN_BUSY) return;
+  if (!stopFlagKnown()) { showFeedback("没有可解除的急停标记", "warn"); return; }
+  setRunBusy(true);
+  showFeedback("正在解除已知急停标记…", "");
+  let r = null;
+  try { r = await sendWithTimeout("clear_stop", STOP_TIMEOUT_MS, {}); } catch (e) { r = { ok: false, error: "disconnected" }; }
+  if (!r || !r.ok) showFeedback("解除急停失败：" + friendlyError(r), "bad");
+  else showFeedback("已解除急停并保留备份", "ok");
   setRunBusy(false);
   try { await refresh(); } catch (e) {}
 }
@@ -129,6 +206,200 @@ async function loadSummary() {
     const r = await fetch(HUB + "/api/summary", { cache: "no-store" });
     if (r.ok) SUM = await r.json();
   } catch (e) {}
+}
+
+async function refreshWaReport() {
+  const list = document.getElementById("waList");
+  const stats = document.getElementById("waStats");
+  if (!list || !stats) return;
+  try {
+    const r = await fetch(HUB + "/api/wa", { cache: "no-store" });
+    if (!r.ok) throw new Error("http " + r.status);
+    const j = await r.json();
+    const items = Array.isArray(j.items) ? j.items : [];
+    let joinable = 0, clicked = 0, confirmed = 0, review = 0, pending = 0;
+    items.forEach(function (it) {
+      const st = String(it.status || "");
+      const ast = String(it.attempt_state || "");
+      if (st === "可加入") joinable++;
+      if (ast === "clicked") clicked++;
+      if (ast === "confirmed") confirmed++;
+      if (ast === "prepared" || ast === "uncertain") review++;
+      if (st === "需审批" || st === "待确认" || ast === "pending") pending++;
+    });
+    stats.textContent = "检查 " + items.length + " · 可加入 " + joinable + " · 点击 " + clicked + " · 确认 " + confirmed + " · 待核对 " + (review + pending);
+    list.innerHTML = "";
+    if (!items.length) {
+      const li = document.createElement("li");
+      li.className = "small";
+      li.textContent = "暂无 WA 目标；先发现/导入候选，再用单目标入口预览。";
+      list.appendChild(li);
+      return;
+    }
+    items.slice(0, 8).forEach(function (it) {
+      const li = document.createElement("li");
+      const rawCode = String(it.code || "");
+      const code = rawCode ? (rawCode.length > 8 ? rawCode.slice(0, 4) + "…" + rawCode.slice(-2) : rawCode.slice(0, 2) + "…") : "(无code)";
+      const status = String(it.status || "未检查");
+      const join = String(it.join || "未加入");
+      const attempt = String(it.attempt_state || "无动作");
+      const pub = String(it.publisher || "").slice(0, 60);
+      let reason = String(it.attempt_note || it.note || "").slice(0, 80);
+      if (rawCode) reason = reason.split(rawCode).join(code);
+      li.textContent = code + " · " + status + " / " + join + " · " + attempt + (pub ? " · " + pub : "") + (reason ? " · " + reason : "");
+      list.appendChild(li);
+    });
+  } catch (e) {
+    stats.textContent = "WA 报告不可用";
+    list.innerHTML = "";
+    const li = document.createElement("li");
+    li.className = "small";
+    li.textContent = "读取 /api/wa 失败：" + String((e && e.message) || e);
+    list.appendChild(li);
+  }
+}
+
+function memberStatusText(s) {
+  const map = { running: "运行中", done: "已完成", interrupted: "可续采", rate_limited: "冷却中", permission_denied: "权限拒绝", stopped: "已停止", failed: "失败", pending: "未采", no_target: "无可采群", busy: "已有实例", idle: "空闲" };
+  return map[String(s || "")] || String(s || "未知");
+}
+
+function memberTimeText(s) {
+  const v = String(s || "");
+  if (!v) return "—";
+  return v.replace("T", " ").slice(0, 19);
+}
+
+async function loadMembers() {
+  const box = document.getElementById("memberPlatforms");
+  const stats = document.getElementById("memberStats");
+  if (!box || !stats) return;
+  try {
+    const r = await fetch(HUB + "/api/members", { cache: "no-store" });
+    if (!r.ok) throw new Error("http " + r.status);
+    const j = await r.json();
+    renderMembers(j);
+  } catch (e) {
+    stats.textContent = "成员采样不可用";
+    box.innerHTML = "";
+    const d = document.createElement("div");
+    d.className = "member-meta";
+    d.textContent = "读取 /api/members 失败：" + String((e && e.message) || e);
+    box.appendChild(d);
+  }
+}
+
+function renderMembers(j) {
+  const box = document.getElementById("memberPlatforms");
+  const stats = document.getElementById("memberStats");
+  if (!box || !stats) return;
+  const plats = Array.isArray(j && j.platforms) ? j.platforms : [];
+  const running = plats.filter(function (p) { return p.state && p.state.running; }).length;
+  stats.textContent = running ? (running + " 个平台采样中") : "空闲";
+  const oldSel = {};
+  Array.prototype.forEach.call(box.querySelectorAll("select[id^='memberSel-']"), function (s) { oldSel[s.id] = s.value; });
+  box.innerHTML = "";
+  if (!plats.length) {
+    const d = document.createElement("div");
+    d.className = "member-meta";
+    d.textContent = "没有可报告的采样平台。";
+    box.appendChild(d);
+    return;
+  }
+  plats.forEach(function (p) {
+    const platform = String(p.platform || "");
+    const st = p.state || {};
+    const div = document.createElement("div");
+    div.className = "member-plat";
+
+    const head = document.createElement("div");
+    head.className = "member-head";
+    const nm = document.createElement("b");
+    nm.textContent = platform;
+    const pill = document.createElement("span");
+    pill.className = "pill";
+    pill.textContent = memberStatusText(st.status);
+    head.appendChild(nm);
+    head.appendChild(pill);
+    div.appendChild(head);
+
+    const row = document.createElement("div");
+    row.className = "member-row";
+    const sel = document.createElement("select");
+    sel.id = "memberSel-" + platform;
+    const auto = document.createElement("option");
+    auto.value = "";
+    auto.textContent = "自动：优先未采/中断群";
+    sel.appendChild(auto);
+    const opts = Array.isArray(p.options) ? p.options : [];
+    opts.forEach(function (o) {
+      const op = document.createElement("option");
+      op.value = String(o.key || "");
+      const cov = Number(o.coverage || 0);
+      op.textContent = String(o.name || o.key || "") + " · " + memberStatusText(o.status) + (cov ? " · " + cov + "%" : "");
+      sel.appendChild(op);
+    });
+    if (oldSel[sel.id]) sel.value = oldSel[sel.id];
+    row.appendChild(sel);
+
+    const start = document.createElement("button");
+    start.className = "mbtn primary";
+    start.textContent = "开始";
+    start.disabled = !!st.running;
+    start.addEventListener("click", function () { memberAction(platform, "start", sel.value, cb.checked); });
+    row.appendChild(start);
+
+    const stop = document.createElement("button");
+    stop.className = "mbtn";
+    stop.textContent = "停止本平台";
+    stop.disabled = !st.running;
+    stop.addEventListener("click", function () { memberAction(platform, "stop", "", false); });
+    row.appendChild(stop);
+    div.appendChild(row);
+
+    const trial = document.createElement("label");
+    trial.className = "member-trial";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = "memberTrial-" + platform;
+    trial.appendChild(cb);
+    trial.appendChild(document.createTextNode("试跑一个后停"));
+    div.appendChild(trial);
+
+    const meta = document.createElement("div");
+    meta.className = "member-meta";
+    const parts = [];
+    parts.push("群 " + String(st.target_name || st.target || "—"));
+    parts.push("覆盖 " + Number(st.coverage || 0) + "%");
+    parts.push("新增 " + Number(st.new || 0));
+    parts.push("重复 " + Number(st.duplicates || 0));
+    parts.push("最后成功 " + memberTimeText(st.last_success));
+    if (st.stop_reason) parts.push("停止原因 " + String(st.stop_reason));
+    if (st.cooldown_until) parts.push("冷却至 " + memberTimeText(st.cooldown_until));
+    meta.textContent = parts.join(" · ");
+    div.appendChild(meta);
+
+    box.appendChild(div);
+  });
+}
+
+function memberErrorText(r) {
+  const code = String((r && r.error) || "unknown");
+  const map = { cooldown: "冷却中，稍后再试", member_running: "已有采样实例在运行", stopped: "全局急停中，不能启动", bad_target: "目标无效", sampler_missing: "采样脚本缺失" };
+  return map[code] || code;
+}
+
+async function memberAction(platform, action, target, trial) {
+  const type = action === "start" ? "members_start" : "members_stop";
+  const extra = action === "start" ? { platform: platform, target: target || "", trial: !!trial } : { platform: platform };
+  let r = null;
+  try { r = await sendWithTimeout(type, 8000, extra); } catch (e) { r = { ok: false, error: "disconnected" }; }
+  if (r && r.ok) {
+    showFeedback(action === "start" ? "已提交采样请求；单实例保护生效。" : "已请求停止；将在当前页/等待后停下。", "ok");
+  } else {
+    showFeedback((action === "start" ? "启动失败：" : "停止失败：") + memberErrorText(r), "bad");
+  }
+  await loadMembers();
 }
 
 async function send(type) {
@@ -188,7 +459,15 @@ async function refresh() {
 
   const running = !!st.running;
   $("#btnStart").disabled = running || RUN_BUSY;
-  $("#btnStop").disabled = !running || RUN_BUSY;
+  // Stop must stay reachable when the hub is idle but an external worker
+  // (run_daily) is running. The background/hub round-stop path is idempotent.
+  $("#btnStop").disabled = RUN_BUSY;
+  const skip = document.getElementById("btnSkip");
+  if (skip) skip.disabled = RUN_BUSY || !currentPlatform();
+  const recover = document.getElementById("btnRecover");
+  if (recover) recover.disabled = RUN_BUSY || !stopFlagKnown();
+  const emergency = document.getElementById("btnEmergency");
+  if (emergency) emergency.disabled = false;
   renderStatusBar(LIVE, LIVE_AT);
 }
 
@@ -352,18 +631,31 @@ function computeStatus(live, receivedAt, now) {
   out.disconnected = false;
 
   const running = !!live.running;
-  const active = live.activePlatform || "";
-  const pn = active || live.platform || "—";
   const ph = live.phase || (running ? "running" : "idle");
-  out.platform = running ? pn + (active && active !== live.platform ? " · 执行中" : "") : pn;
-  out.phase = running ? stageLabel(ph) : (ph === "done" ? "已结束" : ph === "idle" ? "空闲" : stageLabel(ph));
-
-  const cur = running ? stageLabel(ph) : "—";
-  const nxt = running ? nextStageLabel(ph) : "—";
-  const task = live.current ? String(live.current) : "—";
-  out.stage = "当前：" + cur + "（" + task + "） · 下一：" + nxt;
-
   const p = live.pipeline || null;
+  const pipeRunning = !!(p && p.state === "running");
+  // hub 的 activePlatform 只是最后一次平台名；activeLive=false 时不能当作当前平台。
+  const active = (live.activeLive && live.activePlatform) ? String(live.activePlatform) : "";
+  const pipePlatform = (pipeRunning && p.current_platform) ? String(p.current_platform) : "";
+  const hubPlatform = running ? String(live.platform || "") : "";
+  let pn = pipePlatform || active || hubPlatform;
+  if (!pn) {
+    const last = live.activePlatform ? String(live.activePlatform) : "";
+    pn = last ? ("无活跃平台 · 上次 " + last + (live.activeAt ? " " + String(live.activeAt) : "")) : "无活跃平台";
+  } else if (pipeRunning) {
+    pn += " · 外部执行中";
+    const pupd = Date.parse(p.updated_at || "");
+    if (isFinite(pupd) && (now - pupd > PIPELINE_STALE_SEC * 1000)) pn += " · 状态陈旧";
+  } else if (running && active) {
+    pn += " · 执行中";
+  }
+  out.platform = pn;
+  out.phase = pipeRunning ? "运行中" : (running ? stageLabel(ph) : (ph === "done" ? "已结束" : ph === "idle" ? "空闲" : stageLabel(ph)));
+
+  const cur = pipeRunning ? (p.current_platform || "整轮") : (running ? stageLabel(ph) : "—");
+  const nxt = pipeRunning ? (p.next_platform || "—") : (running ? nextStageLabel(ph) : "—");
+  const task = pipeRunning ? "外部 worker" : (live.current ? String(live.current) : "—");
+  out.stage = "当前：" + cur + "（" + task + "） · 下一：" + nxt;
   if (!p || p.state === "unknown" || !p.state) {
     out.pipeline = "未知";
     out.pipeMeta = (p && p.reason === "pipeline_status_invalid") ? "整轮状态不可读" : "无整轮证据";
@@ -494,12 +786,18 @@ async function refreshLive() {
     : '<li><span class="m">还没有事件</span></li>';
 }
 
-// 开始/停止：每个按钮只发一次请求，等待后台响应后再恢复；不自动重试
+// 开始/停止/跳过/急停：每个按钮只发一次请求，等待后台响应后再恢复；不自动重试
 (function () {
   var s = document.getElementById("btnStart");
   if (s) s.addEventListener("click", function () { requestStart(); });
   var t = document.getElementById("btnStop");
   if (t) t.addEventListener("click", function () { requestStop(); });
+  var k = document.getElementById("btnSkip");
+  if (k) k.addEventListener("click", function () { requestSkip(); });
+  var e = document.getElementById("btnEmergency");
+  if (e) e.addEventListener("click", function () { requestEmergencyStop(); });
+  var c = document.getElementById("btnRecover");
+  if (c) c.addEventListener("click", function () { requestClearStop(); });
 })();
 
 // 「看板 ↗」：必须在扩展上下文里才能开标签页
@@ -517,9 +815,13 @@ CTX_ALIVE = ctxAlive();
 // 平台列表只依赖 hub 的 HTTP 接口，与扩展上下文无关，必须无条件渲染
 loadPlatforms();
 loadSummary().then(refresh);
+refreshWaReport();
+loadMembers();
 setTimeout(refresh, 800);
 setTimeout(refresh, 2400);
 setInterval(refresh, 2000);
+setInterval(refreshWaReport, 5000);
+setInterval(loadMembers, 5000);
 setInterval(refreshLive, 2000);
 setInterval(function () { renderStatusBar(LIVE, LIVE_AT); }, 1000);
 setTimeout(refreshLive, 600);

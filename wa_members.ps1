@@ -1,13 +1,23 @@
 ﻿param(
   [string]$GroupMatch = "Linhares",
   [string]$AcceptCode = "",
-  [string]$OutDir = "D:\DeepSeek\运营\data",
+  [string]$OutDir = "",
   [int]$WaitSec = 4,
-  [switch]$DryRun
+  [switch]$DryRun,
+  [switch]$AllowLegacyJoin
 )
 
 $ErrorActionPreference = "Stop"
-$cdp = "D:\DeepSeek\运营\cdp_call.ps1"
+if ($AcceptCode -ne "" -and -not $AllowLegacyJoin) {
+  Write-Host "REFUSED: use wa_one_shot.ps1 (publisher/code binding + attempt guard); legacy path requires -AllowLegacyJoin"
+  exit 2
+}
+$stopRoot = $PSScriptRoot
+. (Join-Path $stopRoot "lib\stop.ps1")
+. (Join-Path $stopRoot "lib\run_control.ps1")
+if (Test-WorkerStop $stopRoot) { Write-Host "SKIP stop signal"; exit 0 }
+$cdp = Join-Path $PSScriptRoot "cdp_call.ps1"
+if (-not $OutDir) { $OutDir = Join-Path $PSScriptRoot "data" }
 $match = "web\.whatsapp\.com"
 $stamp = (Get-Date).ToString("yyyy/MM/dd")
 
@@ -26,6 +36,7 @@ function PressEnter {
 }
 
 if ($AcceptCode -ne "") {
+  if (Test-WorkerStop $stopRoot) { Write-Host "SKIP stop signal before accept"; exit 0 }
   $nav = @{ url = "https://web.whatsapp.com/accept?code=$AcceptCode" } | ConvertTo-Json -Compress
   & $cdp -Method "Page.navigate" -ParamsJson $nav -Match $match | Out-Null
   Start-Sleep -Seconds 8
@@ -35,11 +46,13 @@ if ($AcceptCode -ne "") {
     if ($probe -match 'approve|Request to join') { Write-Host "SKIP: 需要管理员审批，未申请" } else { Write-Host "SKIP: 没有 Join group 按钮" }
     exit 0
   }
+  if (Test-WorkerStop $stopRoot) { Write-Host "SKIP stop signal before join click"; exit 0 }
   $click = Eval 'JSON.stringify((function(){const d=document.querySelector("div[role=\"dialog\"]");if(!d)return{ok:false};const b=Array.from(d.querySelectorAll("div[role=\"button\"],button")).find(x=>/^Join group$/i.test((x.innerText||"").trim()));if(!b)return{ok:false};b.focus();b.click();return{ok:true};})())'
   Write-Host "JOIN CLICK: $click"
   Start-Sleep -Seconds 6
 }
 
+if (Test-WorkerStop $stopRoot) { Write-Host "SKIP stop signal before collection"; exit 0 }
 $reSrc = ConvertTo-Json $GroupMatch -Compress
 $focusJs = 'JSON.stringify((function(reSrc){const re=new RegExp(reSrc,"i");const rows=Array.from(document.querySelectorAll("#pane-side div[role=\"row\"]"));const row=rows.find(r=>re.test(r.innerText||""));if(!row)return{ok:false,why:"row-not-found",rows:rows.length};const cell=row.querySelector("div[role=\"gridcell\"]")||row.querySelector("div[tabindex]")||row;cell.focus();return{ok:true,text:(row.innerText||"").replace(/\n/g," | ").slice(0,60)};})(' + $reSrc + '))'
 $focus = Eval $focusJs

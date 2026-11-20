@@ -41,7 +41,7 @@
     <h1>线索 · 信号池</h1>
     <div class="sp"></div>
     <a class="btn" href="/">看板</a>
-    <a class="btn" href="/profile">业务方向 · 水位</a>
+    <a class="btn" href="/profile">业务方向</a>
     <a class="btn" href="/users">成员样本</a>
   </div>
 
@@ -93,7 +93,7 @@ function render() {
     return 0;
   });
   if (!rows.length) {
-    document.getElementById('tblBox').innerHTML = '<div class="panel empty">还没有信号。跑一次：<code>powershell -File D:\\DeepSeek\\运营\\leads_scan.ps1</code></div>';
+    document.getElementById('tblBox').innerHTML = '<div class="panel empty">还没有信号。跑一次：<code>powershell -File leads_scan.ps1</code></div>';
     return;
   }
   var h = '<table><thead><tr><th style="width:28%">帖子</th><th>AI</th><th>意图</th><th>板块</th><th>命中词</th><th>作者</th><th>互动</th></tr></thead><tbody>';

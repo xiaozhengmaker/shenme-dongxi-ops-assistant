@@ -49,3 +49,9 @@ discord_channels.json
 # 密钥文件（只在本机）
 .feishu_app.json
 config.backup.json
+
+# research_water 运行时产物
+research_water/logs/
+research_water/data/
+research_water/run/
+research_water/node_modules/

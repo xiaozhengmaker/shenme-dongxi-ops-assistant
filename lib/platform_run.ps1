@@ -9,6 +9,7 @@ function Invoke-PlatformSequence {
     [scriptblock]$Start,
     [scriptblock]$Wait,
     [scriptblock]$IsStopped,
+    [scriptblock]$IsSkipped,
     [scriptblock]$Say
   )
 
@@ -19,6 +20,11 @@ function Invoke-PlatformSequence {
   foreach ($p in @($Platforms)) {
     if ($IsStopped -and (& $IsStopped)) {
       return @{ status = "stopped"; started = @($started); skipped = @($skipped); failed = @($failed); error = "stopped" }
+    }
+    if ($IsSkipped -and (& $IsSkipped $p)) {
+      [void]$skipped.Add($p)
+      if ($Say) { & $Say ("平台 " + $p + " 已请求跳过，未派发") }
+      continue
     }
 
     $startRes = $null
@@ -48,15 +54,20 @@ function Invoke-PlatformSequence {
     [void]$started.Add($p)
     $done = $false
     try {
-      $done = [bool](& $Wait $p)
+      $waitRes = & $Wait $p
     } catch {
       $msg = [string]$_.Exception.Message
       if ($Say) { & $Say ("全局等待失败 " + $p + "：" + $msg) }
       return @{ status = "global_failure"; started = @($started); skipped = @($skipped); failed = @($failed); error = $msg }
     }
-    if (-not $done) {
+    if (($waitRes -is [string]) -and ($waitRes -eq "skip")) {
+      [void]$skipped.Add($p)
+      if ($Say) { & $Say ("平台 " + $p + " 已跳过，继续下一平台") }
+    } elseif (-not $waitRes) {
       [void]$failed.Add($p)
       if ($Say) { & $Say ("平台 " + $p + " 超时") }
+    } else {
+      $done = $true
     }
     if ($IsStopped -and (& $IsStopped)) {
       return @{ status = "stopped"; started = @($started); skipped = @($skipped); failed = @($failed); error = "stopped" }

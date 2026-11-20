@@ -71,9 +71,27 @@
     <div id="platList"></div>
   </details>
 
+  <section class="livebox" id="waReportBox">
+    <div class="ttl">WA 检查 <span id="waStats" class="live-pill">—</span></div>
+    <ul id="waList" class="live-events"></ul>
+    <div class="hint">单目标：运营目录 wa_one_shot.ps1（默认只预览；人工确认后加 -ConfirmJoin）</div>
+  </section>
+
+  <section class="livebox" id="memberReportBox">
+    <div class="ttl">成员采样 <span id="memberStats" class="live-pill">—</span></div>
+    <div id="memberPlatforms"></div>
+    <div class="hint">只采样成员，不加群、不启动其他平台；每次只处理一个群，默认尽力续采；停止只停本平台。</div>
+  </section>
+
   <section class="actions">
     <button id="btnStart" class="primary">开始运行</button>
-    <button id="btnStop" class="plain">停止</button>
+    <button id="btnStop" class="plain">停止运行</button>
+    <button id="btnSkip" class="plain">跳过当前平台</button>
+  </section>
+
+  <section class="actions ops-actions">
+    <button id="btnEmergency" class="plain danger">全局急停</button>
+    <button id="btnRecover" class="plain" disabled>解除急停</button>
   </section>
 
   <section id="feedback" class="feedback hidden"></section>

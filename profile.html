@@ -49,20 +49,6 @@
   .quotas { border-top: 1px dashed var(--line); margin-top: 12px; padding-top: 12px; }
   .qline { display: grid; grid-template-columns: 92px 84px 1fr; gap: 10px; align-items: center; }
   .muted { color: var(--dim); font-size: 12px; }
-  .tanks { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
-  .tank { text-align: center; }
-  .glass { position: relative; height: 150px; width: 68px; margin: 0 auto;
-           border: 2px solid #d7dbe0; border-top: none; border-radius: 0 0 12px 12px;
-           background: #fafbfc; overflow: hidden; }
-  .water { position: absolute; left: 0; right: 0; bottom: 0;
-           background: linear-gradient(180deg,#6f9dff,#2b6cf6); transition: height .4s; }
-  .water.warn { background: linear-gradient(180deg,#f0c250,#d99a00); }
-  .water.bad { background: linear-gradient(180deg,#ef8a80,#e1483c); }
-  .safe { position: absolute; left: -6px; right: -6px; border-top: 2px dashed #b9c0c8; }
-  .tank .nm { margin-top: 8px; font-weight: 600; }
-  .tank .st { font-size: 12px; color: var(--dim); }
-  .prog { height: 8px; background: #eef0f3; border-radius: 6px; overflow: hidden; margin-top: 6px; }
-  .prog i { display: block; height: 100%; background: var(--green); }
   .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #f0f2f5; color: #5a6066; }
   .tag.g { background: #e7f7ef; color: #0f8a5f; }
   .tag.y { background: #fdf3dc; color: #96700a; }
@@ -123,13 +109,6 @@
       <button class="btn primary" id="btnApply" disabled title="只读版暂不写入">应用并重建候选池</button>
       <span class="muted">只读版：第二步开放写入。</span>
     </div>
-  </div>
-
-  <div class="card">
-    <h3>水位</h3>
-    <div class="sub" id="waterSub">读取中…</div>
-    <div class="tanks" id="tanks"></div>
-    <div id="cov" style="margin-top:14px"></div>
   </div>
 </div>
 

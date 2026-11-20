@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>线索 v1</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark">LW</span><div><b>线索</b><small>跨业务 · 问题直达 · 证据边界</small></div></div>
+  <div id="providerBadge" class="badge muted">provider 检查中…</div>
+</header>
+
+<main class="layout">
+  <aside id="researchSidebar" class="sidebar hidden">
+    <div class="side-head">
+      <h2>研究档案</h2>
+      <button id="btnNew" class="btn small">新建</button>
+    </div>
+    <div id="profileList" class="profile-list"><div class="muted pad">加载中…</div></div>
+    <div class="method">
+      <b>方法门禁</b>
+      <ol>
+        <li>描述 + 四项引导</li>
+        <li>人群假设</li>
+        <li>小样本校准</li>
+        <li>逐条保留 / 修改 / 排除</li>
+        <li>确认并锁版本</li>
+        <li>才可导入证据与出报告</li>
+      </ol>
+      <p>固定人群标准不会被问答自动改写；自动搜索待接，当前只支持手工导入 URL + 原文。模型校准不是证据。</p>
+    </div>
+  </aside>
+
+  <section class="content">
+    <div id="globalMsg" class="msg hidden"></div>
+
+    <section id="studioView" class="panel studio-panel">
+      <div class="studio-copy">
+        <h1>一句话说清业务和问题，先看关键词工作台</h1>
+        <p>不用先建档案、填人群或导入证据。系统自动推断业务、人群与关键词并标出假设；只在首次或你改了人群时请你确认“研究谁”。没有自动搜索，未验证的内容会明确标成 AI 候选。</p>
+      </div>
+      <form id="studioForm" class="studio-form">
+        <label for="studioSentence">业务 + 关键问题 <span class="req">*</span></label>
+        <textarea id="studioSentence" name="sentence" rows="3" required maxlength="3000" placeholder="例如：我们做跨境支付 SaaS，中小卖家最常抱怨的支付问题是什么？"></textarea>
+        <div class="studio-controls">
+          <label class="studio-profile">沿用已确认档案（可选）
+            <select id="studioProfile">
+              <option value="">自动判断 / 新建草稿（不混用其他档案证据）</option>
+            </select>
+          </label>
+          <button id="btnStudioDemo" class="btn" type="button">加载独立演示样例</button>
+          <button id="btnStudio" class="btn primary" type="submit">理解并生成工作台</button>
+        </div>
+        <div class="hint">中文一句话即可。例子里的业务与问题用逗号分隔；已有档案会严格隔离，只读该档案的已确认证据。</div>
+      </form>
+      <div id="studioMsg" class="msg hidden"></div>
+
+      <section id="studioUnderstand" class="panel studio-understand hidden">
+        <div class="panel-head">
+          <div>
+            <h2>先确认：这次研究谁？</h2>
+            <p class="hint">业务、问题和人群都可以改。只有首次或人群签名变化时才需要这一步；确认不会锁定正式研究，也不会改写固定人群标准。</p>
+          </div>
+        </div>
+        <label>业务理解
+          <input id="studioBusiness" type="text" maxlength="200" />
+        </label>
+        <label>关键问题
+          <textarea id="studioQuestion" rows="2" maxlength="3000"></textarea>
+        </label>
+        <div class="studio-audiences-head">
+          <b>主要 / 意见人群（可修改）</b>
+          <button id="btnAddStudioAudience" class="btn small" type="button">+ 人群</button>
+        </div>
+        <div id="studioAudiences" class="studio-audiences"></div>
+        <div id="studioAssumptions" class="studio-assumptions"></div>
+        <button id="btnConfirmUnderstanding" class="btn primary" type="button">确认理解并生成工作台</button>
+      </section>
+
+      <section id="workbenchView" class="hidden">
+        <div id="studioBanner" class="fixture-banner hidden"></div>
+        <div class="studio-kpis">
+          <span>关键词 <b id="studioKwCount">0</b></span>
+          <span>独立有效线索 <b id="studioLeadCount">0</b></span>
+          <span>已验证词 <b id="studioVerifiedCount">0</b></span>
+          <span>用户原话词 <b id="studioUserCount">0</b></span>
+          <span>AI 候选词 <b id="studioAiCount">0</b></span>
+        </div>
+        <div class="panel-head">
+          <div>
+            <h2>关键词工作台</h2>
+            <p class="hint" id="studioNote"></p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="studio-table">
+            <thead><tr><th>选</th><th>关键词</th><th>意图</th><th>人群</th><th>来源类型</th><th>来源</th><th>独立有效线索</th></tr></thead>
+            <tbody id="studioKeywordRows"></tbody>
+          </table>
+        </div>
+        <div id="studioDetail" class="studio-detail hidden"></div>
+        <section class="studio-section">
+          <h3>线索（按问题 × 人群聚合）</h3>
+          <div id="studioLeadGroups" class="studio-groups"></div>
+        </section>
+        <section class="studio-section">
+          <h3>覆盖盲区</h3>
+          <ul id="studioBlind" class="plain"></ul>
+        </section>
+        <div class="studio-search">
+          <button id="btnLiveSearch" class="btn primary" type="button">真实搜索选中关键词</button>
+          <button id="btnCancelSearch" class="btn hidden" type="button">取消搜索</button>
+          <span id="studioSearchMsg" class="hint">只在勾选关键词后显式联网检索；不会自动搜索。</span>
+          <div id="studioSearchResults" class="studio-search-results hidden"></div>
+        </div>
+        <div class="studio-export">
+          <button id="btnExportKeywords" class="btn primary" type="button">导出选中关键词为拓群交接清单</button>
+          <span id="studioExportMsg" class="hint"></span>
+        </div>
+      </section>
+    </section>
+
+    <section id="askView" class="panel ask-panel">
+      <div class="ask-copy">
+        <h1>问一个关键问题，直接得到回答</h1>
+        <p>不用先建档案、填人群或锁定。系统会标出假设、只复用你选择的已确认研究证据，并把证据结论、推断和未知分开；没有证据时给条件判断和验证方向。</p>
+      </div>
+      <form id="askForm" class="ask-form">
+        <label class="ask-label" for="questionInput">你的关键问题 <span class="req">*</span></label>
+        <textarea id="questionInput" name="question" rows="3" required maxlength="3000" placeholder="例如：这个业务的目标人群现在最愿意为什么价值付费？我应该先验证什么？"></textarea>
+        <div class="ask-controls">
+          <label class="ask-profile">复用已确认研究证据（可选）
+            <select id="askProfile">
+              <option value="">不选择档案 · 不混用任何已有证据</option>
+            </select>
+          </label>
+          <button id="btnAsk" class="btn primary ask-submit" type="submit">提问</button>
+        </div>
+        <div class="hint">问题唯一必填。选择档案时严格只读该档案已确认的证据，不会自动锁定或覆盖固定人群标准。</div>
+      </form>
+      <div id="askMsg" class="msg hidden"></div>
+    </section>
+
+    <section id="answerView" class="panel hidden">
+      <div id="fixtureBanner" class="fixture-banner hidden">fixture 演示数据：合成档案与规则生成，不是真实模型，也不是真实研究结论。</div>
+      <div class="panel-head">
+        <h2>回答</h2>
+        <span id="answerMeta" class="hint"></span>
+      </div>
+      <div id="answerContent" class="hidden">
+        <p id="answerQuestion" class="answer-question"></p>
+        <section class="answer-block">
+          <h3>系统假设</h3>
+          <ul id="answerAssumptions" class="plain"></ul>
+        </section>
+        <section class="answer-block">
+          <h3>证据结论 <small>每条都可核查到具体来源</small></h3>
+          <div id="answerEvidence" class="answer-evidence"></div>
+        </section>
+        <section class="answer-block">
+          <h3>推断 <small>不是证据，可能被你推翻</small></h3>
+          <ul id="answerInferences" class="plain"></ul>
+        </section>
+        <section class="answer-block">
+          <h3>未知</h3>
+          <ul id="answerUnknowns" class="plain"></ul>
+        </section>
+        <section class="answer-block conditional">
+          <h3>条件判断</h3>
+          <p id="answerConditional"></p>
+        </section>
+        <section class="answer-block">
+          <h3>建议验证方向</h3>
+          <ol id="answerValidation" class="plain"></ol>
+        </section>
+        <section id="answerFollowUpBlock" class="answer-block followup hidden">
+          <h3>一个可选追问</h3>
+          <p id="answerFollowUp"></p>
+          <button id="btnUseFollowUp" class="btn small" type="button">用这个问题继续</button>
+        </section>
+        <section class="answer-block">
+          <h3>边界与限制</h3>
+          <ul id="answerLimitations" class="plain"></ul>
+        </section>
+        <section class="answer-block">
+          <h3>引用的证据</h3>
+          <div id="answerCitations" class="answer-citations"></div>
+        </section>
+      </div>
+    </section>
+
+    <details id="advancedResearch" class="advanced">
+      <summary>高级研究：完整流程（可选）</summary>
+      <div class="advanced-body">
+        <section id="quickResearchPanel" class="panel quick-research">
+          <div class="panel-head">
+            <div>
+              <h2>快速研究：一句话开始，先确认研究谁</h2>
+              <p class="hint">问题必填，业务背景可选。系统草拟人群、标准、渠道和关键词；你只需确认或修改“研究谁”，不会自动锁定正式研究。</p>
+            </div>
+          </div>
+          <form id="quickResearchForm" class="form">
+            <label>研究问题 <span class="req">*</span>
+              <textarea id="researchQuestion" name="question" rows="2" maxlength="3000" placeholder="例如：这个业务应该先研究哪类人？他们最愿意为什么价值付费？"></textarea>
+            </label>
+            <div class="actions">
+              <button type="button" id="btnUseHomeQuestion" class="btn small ghost">沿用首页问题</button>
+              <span class="hint">问题唯一必填；背景可留空，最多补问一项，也可直接按假设继续。</span>
+            </div>
+            <label>业务背景（可选）
+              <textarea id="researchBackground" name="background" rows="2" placeholder="业务、地区、使用场景、已有线索；留空则按假设继续"></textarea>
+            </label>
+            <div class="actions">
+              <button type="submit" id="btnDraftResearch" class="btn primary">生成研究草稿</button>
+              <span id="researchMsg" class="msg hidden"></span>
+            </div>
+          </form>
+
+          <div id="researchDraftView" class="hidden">
+            <div id="researchFixtureBanner" class="fixture-banner hidden">fixture 演示草稿：合成规则生成，不是真实模型，也不是真实研究结论。</div>
+            <div id="researchGapBox" class="msg warn hidden"></div>
+            <div class="grid2">
+              <div>
+                <h3>业务草稿</h3>
+                <div id="researchBusiness" class="research-summary"></div>
+              </div>
+              <div>
+                <h3>证据强弱（假设）</h3>
+                <div id="researchStrength" class="research-summary"></div>
+              </div>
+            </div>
+            <div class="subhead"><b>研究谁</b><span class="hint">可直接改人群、类型、交集、入选/排除标准和证据强弱；这是你的最终决策。</span></div>
+            <div id="researchAudiences" class="research-audiences"></div>
+            <div class="grid2">
+              <div><h3>入选标准</h3><div id="researchInclude"></div></div>
+              <div><h3>排除标准</h3><div id="researchExclude"></div></div>
+            </div>
+            <div class="grid2">
+              <div><h3>渠道</h3><div id="researchChannels" class="chips"></div></div>
+              <div><h3>关键词</h3><div id="researchKeywords" class="chips"></div></div>
+            </div>
+            <h3>假设与限制</h3>
+            <div id="researchNotes" class="research-summary"></div>
+            <div class="actions">
+              <button type="button" id="btnConfirmResearch" class="btn primary">确认研究谁，查看线索与盲区</button>
+              <button type="button" id="btnResearchAgain" class="btn ghost">重写草稿</button>
+              <span class="hint">确认不会锁定正式研究，也不会覆盖旧档案人群。</span>
+            </div>
+          </div>
+
+          <div id="researchBriefView" class="hidden">
+            <div id="researchBriefBanner" class="fixture-banner hidden"></div>
+            <div class="panel-head"><h2>研究简报</h2><span id="researchBriefMeta" class="hint"></span></div>
+            <div class="kpis">
+              <div class="kpi"><div class="k">可用线索</div><div class="v" id="briefLeadCount">0</div><div class="s">不自动搜索</div></div>
+              <div class="kpi"><div class="k">关键词</div><div class="v" id="briefKeywordCount">0</div><div class="s">研究假设</div></div>
+              <div class="kpi"><div class="k">渠道</div><div class="v" id="briefChannelCount">0</div><div class="s">待验证覆盖</div></div>
+              <div class="kpi"><div class="k">证据</div><div class="v" id="briefEvidenceCount">0</div><div class="s">不是市场规模</div></div>
+            </div>
+            <div class="subhead"><b>研究谁（已确认）</b></div>
+            <div id="researchBriefAudiences"></div>
+            <div class="grid2">
+              <div><h3>入选标准</h3><div id="researchBriefInclude"></div></div>
+              <div><h3>排除标准</h3><div id="researchBriefExclude"></div></div>
+            </div>
+            <div class="grid2">
+              <div><h3>线索</h3><div id="researchBriefLeads" class="research-summary"></div></div>
+              <div><h3>覆盖盲区</h3><div id="researchBriefBlind" class="research-summary"></div></div>
+            </div>
+            <div class="grid2">
+              <div><h3>关键词</h3><div id="researchBriefKeywords" class="chips"></div></div>
+              <div><h3>渠道</h3><div id="researchBriefChannels" class="chips"></div></div>
+            </div>
+            <h3>限制</h3>
+            <div id="researchBriefLimits" class="research-summary"></div>
+          </div>
+        </section>
+
+        <button type="button" id="btnManualResearch" class="btn small ghost">手动填写完整研究档案（可选）</button>
+        <div id="manualResearch" class="hidden">
+        <section id="emptyState" class="panel hero">
+          <h1>需要固定人群标准时，再进入完整研究</h1>
+          <p>这里保留原有描述、人群假设、小样本校准、锁定、证据导入与报告流程。问答页不会自动修改这里的人群或锁定状态。</p>
+          <button id="btnStart" class="btn primary">新建研究档案</button>
+        </section>
+
+        <section id="createPanel" class="panel hidden">
+          <div class="panel-head"><h2>新建档案 · 四项引导</h2><button class="btn ghost" data-close="create">收起</button></div>
+          <form id="createForm" class="form">
+            <div class="grid2">
+              <label>产品/业务名称 <span class="req">*</span><input name="name" maxlength="120" required placeholder="例如：应付账款自动化" /></label>
+              <label>决策目的 <span class="req">*</span><input name="decision_purpose" maxlength="1200" required placeholder="这份研究要支持什么决定？" /></label>
+            </div>
+            <label>产品解决什么 <span class="req">*</span><textarea name="description" rows="3" required placeholder="描述产品/业务、使用场景与边界"></textarea></label>
+            <label>要研究的核心问题 <span class="req">*</span><textarea name="problem" rows="2" required placeholder="哪个问题需要用户证据来回答？"></textarea></label>
+            <div class="grid2">
+              <label>搜索范围（可选）<input name="search_scope" placeholder="例如：财务共享中心；留空=暂不限定" /></label>
+              <label>已有证据（可选）<textarea name="existing_evidence" rows="2" placeholder="已有的访谈、工单、评论或链接；留空=无"></textarea></label>
+            </div>
+            <div class="grid2">
+              <label>使用者可观察价值行为 <span class="req">*</span><textarea name="value_user" rows="3" required placeholder="每行一条，例如：能在购买前比较净价"></textarea></label>
+              <label>付费者可观察价值行为 <span class="req">*</span><textarea name="value_payer" rows="3" required placeholder="每行一条，例如：缩短关账周期"></textarea></label>
+            </div>
+
+            <div class="subhead"><b>人群假设</b><span class="hint">主要用户与意见用户可重叠；请写推断依据</span></div>
+            <div id="audienceRows" class="audience-rows"></div>
+            <button type="button" id="btnAddAudience" class="btn small ghost">+ 添加人群</button>
+
+            <div class="grid3">
+              <label>地域（可选）<input name="regions" placeholder="逗号分隔；留空=未知" /></label>
+              <label>语言（可选）<input name="languages" placeholder="逗号分隔；留空=未知" /></label>
+              <label>来源渠道（可选）<input name="sources" placeholder="论坛、评测站、创作者…" /></label>
+            </div>
+            <div class="grid2">
+              <label>用户原话（可选，每行一条）<textarea name="user_phrases" rows="2" placeholder="与模型种子区分"></textarea></label>
+              <label>检索种子词（可选，逗号分隔）<input name="seed_terms" placeholder="用于校准起点，不作为证据" /></label>
+            </div>
+            <div class="actions"><button class="btn primary" type="submit">创建档案</button><span class="hint">创建后锁定四项引导；v1 不支持创建后改引导。</span></div>
+          </form>
+        </section>
+        </div>
+
+        <section id="profilePanel" class="hidden">
+          <div class="profile-head panel">
+            <div>
+              <div class="muted" id="pStatus"></div>
+              <h1 id="pName"></h1>
+              <p id="pDesc" class="muted"></p>
+            </div>
+            <div class="actions">
+              <button id="btnCalibrate" class="btn">生成小样本校准</button>
+              <button id="btnConfirm" class="btn primary">确认并锁定校准</button>
+              <button id="btnReport" class="btn">生成证据报告</button>
+            </div>
+          </div>
+
+          <section class="panel">
+            <h2>1. 四项引导与人群</h2>
+            <div id="guidanceView"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head"><h2>2. 小样本校准 <span id="calVersion" class="pill"></span></h2><span class="hint">锁前可导入少量校准样本；锁定后只读</span></div>
+            <div id="calibrationView" class="muted">尚未生成校准。</div>
+            <div class="subhead"><b>相关校准样本</b><span class="hint">有出处、可核对引用；不是正式证据</span></div>
+            <form id="sampleForm" class="form">
+              <div class="grid2">
+                <label>样本 URL<input name="url" placeholder="https://…" /></label>
+                <label>来源标题<input name="title" /></label>
+              </div>
+              <label>原文（至少 40 字）<textarea name="text" rows="3"></textarea></label>
+              <label>可核对引用<input name="quote" placeholder="必须逐字出现在样本原文中" /></label>
+              <div class="grid3">
+                <label>取舍结论<select name="decision" id="sampleDecision">
+                  <option value="included">保留（入选）</option>
+                  <option value="excluded">排除</option>
+                  <option value="uncertain">不确定</option>
+                </select></label>
+                <label>关联人群<select name="audience_id" id="sampleAudience"></select></label>
+                <label>渠道<select name="channel"><option value="forum">论坛</option><option value="vendor">垂直网站/厂商</option><option value="creator">创作者</option><option value="social">社交</option><option value="other">其他</option></select></label>
+              </div>
+              <label>为何保留/排除/不确定 <span class="req">*</span><textarea name="reason" id="sampleReason" rows="2" placeholder="写下判断依据，便于确认版本时复核"></textarea></label>
+              <div class="actions"><button class="btn" type="submit">添加校准样本</button><span class="hint">锁定前最多 8 条；锁定后不能新增</span></div>
+            </form>
+            <div id="sampleView" class="muted">尚无校准样本。</div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head"><h2>3. 证据导入</h2><span class="hint" id="evidenceGate">需先确认并锁定校准</span></div>
+            <form id="evidenceForm" class="form disabled">
+              <div class="grid2">
+                <label>来源 URL <span class="req">*</span><input name="url" placeholder="https://…" /></label>
+                <label>标题 <span class="req">*</span><input name="title" /></label>
+              </div>
+              <label>原文（仅合成/已获授权文本；至少 40 字）<textarea name="text" rows="4"></textarea></label>
+              <label>可核对引用原文 <span class="req">*</span><input name="quote" placeholder="必须逐字出现在正文中" /></label>
+              <div class="grid3">
+                <label>渠道<select name="channel"><option value="forum">论坛</option><option value="vendor">垂直网站/厂商</option><option value="creator">创作者</option><option value="social">社交</option><option value="other">其他</option></select></label>
+                <label>信号类型<select name="signal_type"><option value="problem">问题</option><option value="need">需要</option><option value="contradiction">矛盾</option><option value="behavior">行为</option></select></label>
+                <label>发布日期<input name="published_at" placeholder="YYYY-MM-DD 或未知" /></label>
+              </div>
+              <div class="grid3">
+                <label>对应人群<select name="audience_id" id="evAudience"></select></label>
+                <label>对应场景<select name="scenario_id" id="evScenario"></select></label>
+                <label>独立来源渠道? <span class="hint">按 URL 域名去重</span><input disabled value="自动" /></label>
+              </div>
+              <div class="grid3">
+                <label>地域（可空=未知）<input name="region" /></label>
+                <label>语言（可空=未知）<input name="language" /></label>
+                <label>证据摘要（可空则用引用）<input name="summary" /></label>
+              </div>
+              <label>证据词（逗号分隔）<input name="terms" placeholder="例如：exception queue, invoice matching" /></label>
+              <div class="actions"><button class="btn primary" type="submit">导入证据</button><span class="hint">重复 URL / 正文 / 近似转载会被拒绝并记录</span></div>
+            </form>
+            <div id="evidenceResult" class="msg hidden"></div>
+            <div id="evidenceView" class="muted">尚无证据。</div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head"><h2>4. 证据驱动报告</h2><span class="hint">只聚合已确认证据；不声称市场份额/实际触达</span></div>
+            <div id="reportView" class="muted">导入证据后生成报告。</div>
+          </section>
+        </section>
+      </div>
+    </details>
+  </section>
+</main>
+
+<footer class="foot">本地候选 · 数据仅写入本目录 data/ · 不连接部署目录/账号 · <span id="footProvider"></span></footer>
+<script src="/app.js"></script>
+</body>
+</html>

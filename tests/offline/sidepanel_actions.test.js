@@ -72,7 +72,7 @@ function loadSidepanel() {
           return { ok: true, st: { running: statusRunning, stats: { joined: 0 }, lastLog: "" }, hub: { ok: true, phase: "idle" }, cfg: null, probe: {} };
         }
         if (msg.type === "start") { startCalls++; return await startImpl(); }
-        if (msg.type === "stop") { stopCalls++; return await stopImpl(); }
+        if (msg.type === "stop" || msg.type === "stop_run") { stopCalls++; return await stopImpl(); }
         return { ok: true };
       }
     },

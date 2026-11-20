@@ -1,0 +1,15 @@
+{
+  "name": "leads-water-v1",
+  "version": "1.0.0",
+  "private": true,
+  "description": "跨业务线索与水位 v1 本地候选",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "start:fixture": "node server.js --provider=fixture",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

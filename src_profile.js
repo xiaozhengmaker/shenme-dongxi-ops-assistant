@@ -134,7 +134,7 @@
       var total = (cfg.quotas && cfg.quotas[p]) || 0;
       if (p === 'Reddit') {
         var d0 = el('div', 'qline');
-        d0.innerHTML = '<b>' + p + '</b><span class="muted">—</span><span class="muted">只做覆盖率，不参与水位</span>';
+        d0.innerHTML = '<b>' + p + '</b><span class="muted">—</span><span class="muted">只做覆盖率，不参与配额</span>';
         box.appendChild(d0);
         return;
       }
@@ -171,78 +171,10 @@
     });
   }
 
-  /* ---------- 水位 ---------- */
-  function loadWater() {
-    fetch(HUB + '/api/water').then(function (r) { return r.json(); }).then(function (d) {
-      $('#waterSub').textContent = d.subtitle || '';
-      var box = $('#tanks'); box.innerHTML = '';
-      (d.items || []).forEach(function (it) {
-        box.appendChild(tank(it));
-      });
-      renderCoverage(d.coverage || []);
-    }).catch(function (e) {
-      $('#waterSub').textContent = '读取失败：' + e;
-    });
-  }
-
-  function tank(it) {
-    var w = el('div', 'tank');
-    var g = el('div', 'glass');
-    var wm = el('div', 'water');
-    if (it.type === 'supply') {
-      var pct = it.safe ? Math.min(100, Math.round(it.level / it.safe * 100)) : 0;
-      wm.style.height = pct + '%';
-      if (it.status === 'red') wm.className = 'water bad';
-      else if (it.status === 'amber') wm.className = 'water warn';
-      var sf = el('div', 'safe');
-      sf.style.bottom = '100%';
-      sf.style.bottom = (it.safe ? Math.min(100, 100) : 0) + '%';
-      // 安全水位线：按 safe 归一化到 0..100，若 safe>level 就画在 level 之上
-      g.appendChild(wm);
-      var lineTop = 100 - Math.min(100, Math.round(it.level / it.safe * 100));
-      sf.style.top = Math.max(0, Math.min(96, 100 - Math.min(100, Math.round(it.safe / it.safe * 100)))) + '%';
-      sf.style.top = '0%';
-      g.appendChild(sf);
-    } else {
-      wm.style.height = (it.pct || 0) + '%';
-    }
-    if (it.type === 'supply' && !it.level) { wm.style.height = '0%'; wm.className = 'water'; }
-    w.appendChild(g);
-    var nm = el('div', 'nm'); nm.textContent = it.platform;
-    var st = el('div', 'st');
-    if (it.type === 'supply') {
-      st.innerHTML = '<b>' + it.level + ' / ' + it.safe + '</b><br>' +
-        (it.level ? (it.days == null ? '数据不足' : ('还能撑 ' + it.days + ' 天')) : '池空 · 待补货') +
-        ' <span class="tag ' + (it.status === 'green' ? 'g' : it.status === 'amber' ? 'y' : 'r') + '">' +
-        (it.status === 'green' ? '绿' : it.status === 'amber' ? '黄' : '红') + '</span>';
-    } else {
-      st.innerHTML = (it.label || '') + '<div class="prog"><i style="width:' + (it.pct || 0) + '%"></i></div>';
-    }
-    w.appendChild(nm); w.appendChild(st);
-    return w;
-  }
-
-  function renderCoverage(list) {
-    var box = $('#cov'); box.innerHTML = '';
-    if (!list.length) return;
-    var t = el('div', 'muted');
-    t.style.marginBottom = '6px';
-    t.textContent = '覆盖率（覆盖型平台）';
-    box.appendChild(t);
-    list.forEach(function (c) {
-      var row = el('div', 'row');
-      row.innerHTML = '<b style="width:90px">' + c.platform + '</b>' +
-        '<span class="muted">' + c.done + ' / ' + c.total + ' ' + (c.unit || '') + '</span>' +
-        '<span class="tag ' + (c.status === 'green' ? 'g' : c.status === 'red' ? 'r' : 'y') + '">' +
-        (c.note || '') + '</span>';
-      box.appendChild(row);
-    });
-  }
 
   /* ---------- 初始化 ---------- */
   fetch(HUB + '/api/config').then(function (r) { return r.json(); }).then(function (c) {
     state.cfg = c;
     $('#biz').value = 'CS2 第三方开箱站（SkinVS），做箱子和皮肤交易，目标巴西/俄罗斯/土耳其/东南亚，不要战队招募和找队友';
-    loadWater();
-  }).catch(function () { loadWater(); });
+  }).catch(function () {});
 })();

@@ -53,6 +53,8 @@ try {
 . (Join-Path $here "lib\join_guard.ps1")
 . (Join-Path $here "lib\platform_cooldown.ps1")
 . (Join-Path $here "lib\pipeline_status.ps1")
+. (Join-Path $here "lib\run_control.ps1")
+. (Join-Path $here "lib\member_sample.ps1")
 $script:PlatformCooldownPath = Join-Path $here "data\platform_cooldown.json"
 $script:receiptNames = @{}
 
@@ -67,6 +69,15 @@ $cfgPath = Join-Path $here "config.json"
 
 
 $cfg = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+# 单目标验证：可强制 Facebook join 目标白名单（精确 id 或用户名，逗号分隔）。
+# 未设置时保持原行为；设置后总派发上限为 1，重复排队也不会超过。
+$script:JoinWhitelist = @()
+try {
+  $rawWl = [string]$env:GOPS_FB_JOIN_WHITELIST
+  if ($rawWl) {
+    $script:JoinWhitelist = @($rawWl.Split(",") | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+  }
+} catch { }
 
 
 
@@ -126,6 +137,18 @@ $state = @{
 
 
 
+  existing   = 0
+
+
+
+  local      = 0
+
+
+
+  joinDispatched = 0
+
+
+
   skipped    = 0
 
 
@@ -173,6 +196,17 @@ $state = @{
 
 
 
+
+function Get-ActiveRunForControl {
+  try {
+    $p = Get-PipelineStatusView -BaseDir $here
+    if ($p -and [string]$p.state -eq "running" -and $p.run_id) {
+      return @{ source = "pipeline"; run_id = [string]$p.run_id; platform = [string]$p.current_platform }
+    }
+  } catch { }
+  if ($state.running) { return @{ source = "hub"; run_id = ""; platform = [string]$Platform } }
+  return @{ source = "none"; run_id = ""; platform = "" }
+}
 
 $minMembers = 300
 
@@ -1283,7 +1317,7 @@ $state.extAt = ""
 
 
 
-  $state.joined = 0; $state.skipped = 0; $state.failed = 0
+  $state.joined = 0; $state.existing = 0; $state.local = 0; $state.skipped = 0; $state.failed = 0
 
 
 
@@ -1683,7 +1717,7 @@ function Write-JoinRecord($target, $result) {
 
 
 
-  $key = if ($target.u) { "TG-" + $target.u } else { "TG-" + $target.id }
+  $key = Get-GroupRecordKey -Platform $Platform -Target $target
 
 
 
@@ -1759,7 +1793,7 @@ function Write-JoinRecord($target, $result) {
 
 
 
-  $wFeishu = $false
+  $cloudState = "disabled"
 
 
 
@@ -1819,7 +1853,8 @@ function Write-JoinRecord($target, $result) {
 
 
 
-        Update-FsRecords -Updates @(@{ record_id = $script:FsKeyMap[$fkey]; fields = $f }) | Out-Null
+        $upd = Update-FsRecords -Updates @(@{ record_id = $script:FsKeyMap[$fkey]; fields = $f })
+        $cloudState = $(if ([int]$upd -gt 0) { "existing" } else { "failed" })
 
 
 
@@ -1827,11 +1862,12 @@ function Write-JoinRecord($target, $result) {
 
 
 
-        Add-FsRecords -FieldSets @($f) | Out-Null
+        $added = Add-FsRecordOnce -Fields $f -Cache $script:FsKeyMap
+        $cloudState = $(if ($added) { "added" } else { "failed" })
 
 
 
-        if ($fkey) { $script:FsKeyMap[$fkey] = "pending" }
+        # 缓存由 Add-FsRecordOnce 维护（真实 record_id 或 pending）
 
 
 
@@ -1839,7 +1875,7 @@ function Write-JoinRecord($target, $result) {
 
 
 
-      $wFeishu = $true
+
 
 
 
@@ -1847,7 +1883,7 @@ function Write-JoinRecord($target, $result) {
 
 
 
-    catch { Write-Warning ("写飞书失败：" + $_.Exception.Message) }
+    catch { $cloudState = "failed"; Write-Warning ("写飞书失败：" + $_.Exception.Message) }
 
 
 
@@ -1863,7 +1899,8 @@ function Write-JoinRecord($target, $result) {
 
 
 
-  return ($wFeishu -or $wLocal)
+  $status = Get-JoinRecordStatus -CloudState $cloudState -LocalOk ([bool]$wLocal)
+  return [pscustomobject]@{ status = $status; cloud = $cloudState; local = [bool]$wLocal }
 
 
 
@@ -3240,7 +3277,7 @@ while ($listener.IsListening) {
 
 
 
-        joined = $state.joined; skipped = $state.skipped; failed = $state.failed;
+        joined = $state.joined; existing = $state.existing; local = $state.local; joinDispatched = $state.joinDispatched; skipped = $state.skipped; failed = $state.failed;
 
 
 
@@ -3274,6 +3311,8 @@ while ($listener.IsListening) {
         observedAt = (Get-Date).ToString("o");
         cooldowns = (Get-PlatformCooldownSnapshot -Path $script:PlatformCooldownPath -Now (Get-Date));
         pipeline = (Get-PipelineStatusView -BaseDir $here);
+        stopFlag = (Get-GOpsStopInfo -BaseDir $here);
+        runControl = (Get-RunControlView -BaseDir $here);
 
 
 
@@ -3302,7 +3341,7 @@ while ($listener.IsListening) {
 
 
 
-      Send-Json $ctx 200 @{ phase = $state.phase; running = $state.running; joined = $state.joined;
+      Send-Json $ctx 200 @{ phase = $state.phase; running = $state.running; joined = $state.joined; existing = $state.existing; local = $state.local; joinDispatched = $state.joinDispatched;
 
 
 
@@ -4266,7 +4305,7 @@ while ($listener.IsListening) {
 
 
 
-    Write-Host ("[hub] 候选入池新增 " + $mg.added + "，池深 " + $mg.depth + "（水位 " + (Get-PoolWatermark $Platform) + "）")
+    Write-Host ("[hub] 候选入池新增 " + $mg.added + "，池深 " + $mg.depth + "（门槛 " + (Get-PoolWatermark $Platform) + "）")
 
 
 
@@ -4274,7 +4313,7 @@ while ($listener.IsListening) {
 
 
 
-      Add-Event ("[池] " + $Platform + " 池深 " + $mg.depth + " 低于水位 " + (Get-PoolWatermark $Platform) + "，需补水")
+      Add-Event ("[池] " + $Platform + " 池深 " + $mg.depth + " 低于门槛 " + (Get-PoolWatermark $Platform) + "，需补水")
 
 
 
@@ -5498,165 +5537,17 @@ while ($listener.IsListening) {
 
 
 
-    if ($path -eq "/api/water" -and $req.HttpMethod -eq "GET") {
+    if ($path -eq "/api/members" -and $req.HttpMethod -eq "GET") {
 
-
-
-      $sum = Get-Summary
-
-
-
-      $counts = @{}
-
-
-
-      foreach ($sp in @($sum.platforms)) { $counts[[string]$sp.name] = $sp }
-
-
-
-      $items = @()
-
-
-
-      $poolDir = Join-Path $PSScriptRoot "data"
-
-
-
-      foreach ($pf2 in @(@{ p = "Telegram"; days = 7 }, @{ p = "Facebook"; days = 14 })) {
-
-
-
-        $plat = $pf2.p; $dd = $pf2.days
-
-
-
-        $qv = 0; try { $qv = [int]$cfg.quotas.$plat } catch { }
-
-
-
-        # 水位口径：只数「能用」的（未过期 + 过相关度闸门 + 不在跳过名单）；raw 仅作诊断
-
-
-
-        $lvlRaw = 0
-
-
-
-        try { $lvlRaw = Get-PoolRawDepth $plat } catch { $lvlRaw = 0 }
-
-
-
-        $lvl = 0
-
-
-
-        try { $lvl = Get-PoolDepth $plat } catch { $lvl = 0 }
-
-
-
-        $safe = $qv * $dd
-
-
-
-        $days = if ($qv -gt 0) { [Math]::Round($lvl / $qv, 1) } else { $null }
-
-
-
-        $st = "red"
-
-
-
-        if ($days -ne $null) {
-
-
-
-          if ($days -ge $dd) { $st = "green" } elseif ($days -ge 3) { $st = "amber" }
-
-
-
-        }
-
-
-
-        $items += @{ platform = $plat; type = "supply"; level = $lvl; level_raw = $lvlRaw; safe = $safe; quota = $qv; days = $days; status = $st }
-
-
-
+      try {
+        Send-Json $ctx 200 (Get-MemberOverview $here)
+      } catch {
+        Send-Json $ctx 500 @{ ok = $false; error = "members_report_failed" }
       }
-
-
-
-      $items += @{ platform = "WhatsApp"; type = "off"; level = 0; safe = 0; status = "off"; label = "已停用" }
-
-
-
-
-
-
-
-      $cov = @()
-
-
-
-      $dcN = if ($counts.ContainsKey("Discord")) { [int]$counts["Discord"].groups } else { 0 }
-
-
-
-      $stN = if ($counts.ContainsKey("Steam")) { [int]$counts["Steam"].groups } else { 0 }
-
-
-
-      $rdN = if ($counts.ContainsKey("Reddit")) { [int]$counts["Reddit"].groups } else { 0 }
-
-
-
-      $cov += @{ platform = "Steam"; done = $stN; total = $stN; unit = "群成员已抓"; pct = 100; status = "green"; note = "已同步" }
-
-
-
-      $cov += @{ platform = "Discord"; done = $dcN; total = $dcN; unit = "服已统计"; pct = 100; status = "green"; note = "只统计不加入" }
-
-
-
-      $rdTot = [Math]::Max($rdN, 18)
-
-
-
-      $cov += @{ platform = "Reddit"; done = $rdN; total = $rdTot; unit = "板块已订阅"; pct = [Math]::Min(100, [int]($rdN * 100 / $rdTot)); status = "red"; note = "客观供给约 18 个" }
-
-
-
-
-
-
-
-      Send-Json $ctx 200 @{
-
-
-
-        subtitle = "供给型看水位与天数；覆盖型看进度。只读版：数字为当前池/库快照。"
-
-
-
-        items = $items; coverage = $cov
-
-
-
-      }
-
-
 
       continue
 
-
-
     }
-
-
-
-
-
-
 
     if ($path -eq "/api/wa" -and $req.HttpMethod -eq "GET") {
 
@@ -5905,6 +5796,36 @@ while ($listener.IsListening) {
       $body = (New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
 
 
+
+      if ($body.action -eq "members_start" -or $body.action -eq "members_stop") {
+
+        $memberPlatform = [string]$body.platform
+        if ($memberPlatform -notin @("Steam", "Telegram")) {
+          Send-Json $ctx 400 @{ ok = $false; error = "unknown_platform" }
+          continue
+        }
+
+        if ($body.action -eq "members_stop") {
+          $sr = Request-MemberStop $here $memberPlatform
+          if (-not $sr.ok) { Send-Json $ctx 500 @{ ok = $false; error = $sr.error }; continue }
+          Add-Event ("[hub] " + $memberPlatform + " 成员采样已请求停止")
+          Send-Json $ctx 200 @{ ok = $true; platform = $memberPlatform; stopping = $true }
+          continue
+        }
+
+        $target = [string]$body.target
+        $trial = [bool]$body.trial
+        $sr = Start-MemberSampleProcess -BaseDir $here -Platform $memberPlatform -Target $target -Trial:$trial
+        if (-not $sr.ok) {
+          $code = if ($sr.error -eq "stopped" -or $sr.error -eq "member_running") { 409 } else { 400 }
+          Send-Json $ctx $code @{ ok = $false; error = $sr.error; platform = $memberPlatform }
+          continue
+        }
+        Add-Event ("[hub] " + $memberPlatform + " 成员采样已启动 target=" + [string]$sr.target)
+        Send-Json $ctx 200 @{ ok = $true; platform = $memberPlatform; target = [string]$sr.target; trial = $trial }
+        continue
+
+      }
 
       if ($body.action -eq "pipeline") {
 
@@ -6360,10 +6281,91 @@ while ($listener.IsListening) {
 
 
 
+      elseif ($body.action -eq "round_stop") {
+        $active = Get-ActiveRunForControl
+        if ($active.source -eq "none") {
+          Send-Json $ctx 200 @{ ok = $false; error = "idle" }
+          continue
+        }
+        $reqId = [string]$body.run_id
+        if ($active.source -eq "pipeline" -and (-not $reqId -or $reqId -ne $active.run_id)) {
+          Send-Json $ctx 409 @{ ok = $false; error = "stale_run"; run_id = $active.run_id }
+          continue
+        }
+        if ($reqId -and $active.run_id -and $reqId -ne $active.run_id) {
+          Send-Json $ctx 409 @{ ok = $false; error = "stale_run"; run_id = $active.run_id }
+          continue
+        }
+        if ($active.source -eq "pipeline") {
+          $rr = Request-RunStop -BaseDir $here -RunId $active.run_id
+          if (-not $rr.ok) {
+            Send-Json $ctx 409 @{ ok = $false; error = $rr.reason; run_id = $active.run_id }
+            continue
+          }
+          $state.running = $false
+          $state.phase = "idle"
+          Send-Json $ctx 200 @{ ok = $true; source = "pipeline"; run_id = $active.run_id; already = [bool]$rr.already }
+          continue
+        }
+        $state.running = $false
+        $state.phase = "idle"
+        Send-Json $ctx 200 @{ ok = $true; source = "hub"; local_only = $true }
+        continue
+      }
+
+      elseif ($body.action -eq "skip_platform") {
+        $active = Get-ActiveRunForControl
+        if ($active.source -eq "none") {
+          Send-Json $ctx 200 @{ ok = $false; error = "idle" }
+          continue
+        }
+        $wantPlat = [string]$body.platform
+        if (-not $wantPlat) { $wantPlat = [string]$active.platform }
+        if ($active.source -eq "pipeline") {
+          $reqId = [string]$body.run_id
+          if (-not $reqId -or $reqId -ne $active.run_id) {
+            Send-Json $ctx 409 @{ ok = $false; error = "stale_run"; run_id = $active.run_id }
+            continue
+          }
+          if ($wantPlat -and $active.platform -and $wantPlat -ne $active.platform) {
+            Send-Json $ctx 409 @{ ok = $false; error = "stale_platform"; platform = $active.platform }
+            continue
+          }
+          $sr = Request-PlatformSkip -BaseDir $here -RunId $active.run_id -Platform $wantPlat
+          if (-not $sr.ok) {
+            Send-Json $ctx 409 @{ ok = $false; error = $sr.reason; platform = $active.platform; run_id = $active.run_id }
+            continue
+          }
+          $state.running = $false
+          $state.phase = "idle"
+          Send-Json $ctx 200 @{ ok = $true; source = "pipeline"; run_id = $active.run_id; platform = $wantPlat; already = [bool]$sr.already }
+          continue
+        }
+        if ($wantPlat -and $wantPlat -ne [string]$Platform) {
+          Send-Json $ctx 409 @{ ok = $false; error = "stale_platform"; platform = [string]$Platform }
+          continue
+        }
+        $state.running = $false
+        $state.phase = "idle"
+        Send-Json $ctx 200 @{ ok = $true; source = "hub"; local_only = $true; platform = [string]$Platform }
+        continue
+      }
+
+      elseif ($body.action -eq "clear_stop") {
+        $cr = Clear-KnownHubStop -BaseDir $here
+        if (-not $cr.ok) {
+          Send-Json $ctx 409 @{ ok = $false; error = $cr.reason; detail = [string]$cr.detail }
+          continue
+        }
+        Add-Event "[hub] 已显式解除已知急停标记"
+        Send-Json $ctx 200 @{ ok = $true; cleared = $true; backup = [string]$cr.backup; reason = [string]$cr.reason }
+        continue
+      }
+
       elseif ($body.action -eq "stop") {
         $state.running = $false
         $state.phase = "idle"
-        if (-not $body.cleanup) { try { Set-GOpsStop $here ("hub stop " + (Get-Date).ToString("HH:mm:ss")) | Out-Null } catch {} }
+        if (-not $body.cleanup) { try { Set-GOpsStopWithMeta $here ("hub stop " + (Get-Date).ToString("HH:mm:ss")) "hub_stop" ([string]$body.run_id) | Out-Null } catch {} }
         Write-Host "[hub] stopped"
       }
 
@@ -6561,11 +6563,33 @@ while ($listener.IsListening) {
 
 
 
-        if ($state.queue.Count -eq 0) { $state.phase = "done"; $state.running = $false; Add-Event ("本轮结束 · 加入 " + $state.joined + " / 跳过 " + $state.skipped + " / 失败 " + $state.failed); Send-Json $ctx 204 $null; continue }
+        $joinTask = $null
+        while ($state.queue.Count -gt 0) {
+          $peek = $state.queue.Peek()
+          $wl = @()
+          if ($Platform -eq "Facebook") { $wl = @($script:JoinWhitelist) }
+          $dec = Get-JoinDispatchDecision -Whitelist $wl -TargetKeys @([string]$peek.id, [string]$peek.u) -Dispatched ([int]$state.joinDispatched) -MaxAttempts 1
+          if (-not $dec.allow) {
+            $null = $state.queue.Dequeue()
+            $state.skipped++
+            $nmSkip = if ([string]$peek.title) { [string]$peek.title } else { [string]$peek.t }
+            Add-Event ("[gate] " + $nmSkip + " 跳过：" + $dec.reason)
+            continue
+          }
+          $joinTask = $state.queue.Dequeue()
+          if ($wl.Count -gt 0) { $state.joinDispatched++ }
+          break
+        }
+        if (-not $joinTask) {
+          $state.phase = "done"; $state.running = $false
+          Add-Event ("本轮结束 · 加入 " + $state.joined + " / 已存在 " + $state.existing + " / 本地 " + $state.local + " / 跳过 " + $state.skipped + " / 失败 " + $state.failed)
+          Send-Json $ctx 204 $null
+          continue
+        }
 
 
 
-        $c = $state.queue.Dequeue()
+        $c = $joinTask
 
 
 
@@ -6581,7 +6605,10 @@ while ($listener.IsListening) {
 
 
 
-        Send-Json $ctx 200 @{ action = "join"; platform = $Platform; id = $id; u = $c.u; chatId = $c.id;
+        $navUrl = ""
+        if ($Platform -eq "Facebook") { $navUrl = "https://www.facebook.com/groups/" + [string]$c.id + "/" }
+
+        Send-Json $ctx 200 @{ action = "join"; platform = $Platform; id = $id; u = $c.u; chatId = $c.id; navUrl = $navUrl;
 
 
 
@@ -7184,12 +7211,16 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
                 if ([string]$tgt.u) { $script:receiptNames[[string]$tgt.u] = [string]$nm.name }
               }
             } catch { }
-            Write-JoinRecord $tgt $v | Out-Null
+            $joinRec = Write-JoinRecord $tgt $v
+            $disp = Get-JoinRecordDisposition -Status ([string]$joinRec.status)
+            $state.joined += [int]$disp.joined
+            $state.existing += [int]$disp.existing
+            $state.local += [int]$disp.local
+            $state.failed += [int]$disp.failed
+            Add-Event ("记录 " + $tgt.title + " => " + $joinRec.status + " (cloud=" + $joinRec.cloud + ")")
+          } else {
+            $state.failed++
           }
-
-
-
-          $state.joined++
 
 
 
@@ -7213,11 +7244,14 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
-        } elseif ($v -eq "request_sent" -or $v -eq "not_found" -or $v -eq "approval") {
+        } elseif ($v -eq "request_sent" -or $v -eq "not_found" -or $v -eq "approval" -or $v -eq "visited") {
 
 
 
-          if ($v -eq "request_sent" -and $tgt) { Write-JoinRecord $tgt $v | Out-Null }
+          if ($v -eq "request_sent" -and $tgt) {
+            $joinRec = Write-JoinRecord $tgt $v
+            Add-Event ("待验证记录 " + $tgt.title + " => " + $joinRec.status + " (cloud=" + $joinRec.cloud + ")")
+          }
 
 
 
@@ -7245,7 +7279,7 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
-        Write-Host ("[hub] join " + $tgt.title + " => " + $v)
+        $errDetail = ""; try { $errDetail = [string]$r.error } catch { }; Write-Host ("[hub] join " + $tgt.title + " => " + $v + $(if ($v -eq "err" -or $v -like "err:*") { " [" + $errDetail + "]" } else { "" }))
 
 
 
@@ -7570,6 +7604,5 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 }
-
 
 
