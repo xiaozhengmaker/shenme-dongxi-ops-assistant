@@ -2,20 +2,37 @@
   [Parameter(Mandatory=$true)][string]$Method,
   [string]$ParamsJson = "{}",
   [string]$TargetId = "",
-  [int]$Port = 0,
+  [int]$Port = 9222,
   [int]$TimeoutSec = 40,
   [string]$Match = "feishu\\.cn",
   [string]$Out = ""
 )
 
 $ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "lib\paths.ps1")
-if ($Port -le 0) { $Port = (Get-GOpsPort (Get-GOpsConfig)) }
 $list = (Invoke-WebRequest -Uri "http://127.0.0.1:$Port/json/list" -UseBasicParsing -TimeoutSec 10).Content | ConvertFrom-Json
 
 if ([string]::IsNullOrWhiteSpace($TargetId)) {
   $t = $list | Where-Object { $_.type -eq "page" -and $_.url -match $Match } | Select-Object -First 1
-  if (-not $t) { $t = $list | Where-Object { $_.type -eq "page" } | Select-Object -First 1 }
+  if (-not $t) {
+    $guess = $null
+    if ($Match -match 'telegram') { $guess = 'https://web.telegram.org/k/' }
+    elseif ($Match -match 'reddit') { $guess = 'https://old.reddit.com/' }
+    elseif ($Match -match 'facebook') { $guess = 'https://www.facebook.com/' }
+    elseif ($Match -match 'steam') { $guess = 'https://steamcommunity.com/' }
+    elseif ($Match -match 'whatsapp') { $guess = 'https://web.whatsapp.com/' }
+    if ($guess) {
+      $newUrl = "http://127.0.0.1:$Port/json/new?" + [Uri]::EscapeDataString($guess)
+      try { $null = Invoke-WebRequest -Uri $newUrl -Method Put -UseBasicParsing -TimeoutSec 12 }
+      catch { try { $null = Invoke-WebRequest -Uri $newUrl -UseBasicParsing -TimeoutSec 12 } catch { } }
+      for ($i = 0; $i -lt 15; $i++) {
+        Start-Sleep -Milliseconds 700
+        $list = (Invoke-WebRequest -Uri "http://127.0.0.1:$Port/json/list" -UseBasicParsing -TimeoutSec 10).Content | ConvertFrom-Json
+        $t = $list | Where-Object { $_.type -eq "page" -and $_.url -match $Match } | Select-Object -First 1
+        if ($t) { break }
+      }
+    }
+    if (-not $t) { $t = $list | Where-Object { $_.type -eq "page" } | Select-Object -First 1 }
+  }
 } else {
   $t = $list | Where-Object { $_.id -eq $TargetId } | Select-Object -First 1
 }
@@ -40,7 +57,7 @@ while ((Get-Date) -lt $deadline) {
     $seg = New-Object System.ArraySegment[byte] -ArgumentList @(,$buf)
     $task = $ws.ReceiveAsync($seg, $ct)
     try {
-      if (-not $task.Wait(20000)) { Write-Output "ERR: recv timeout"; $ws.Dispose(); exit 6 }
+      if (-not $task.Wait([Math]::Max(5000, $TimeoutSec * 1000))) { Write-Output "ERR: recv timeout"; $ws.Dispose(); exit 6 }
     } catch {
       $ie = $_.Exception
       while ($ie.InnerException) { $ie = $ie.InnerException }
