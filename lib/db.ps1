@@ -1,4 +1,4 @@
-# 本地数据库（SQLite）通用封装
+﻿# 本地数据库（SQLite）通用封装
 # 约定：所有 DB 操作走 db_tool.py，PowerShell 只负责调用与返回 JSON
 
 $script:DbRoot = Split-Path $PSScriptRoot -Parent
@@ -13,10 +13,20 @@ function Get-DbPython {
       if ($cfg.db -and $cfg.db.python -and (Test-Path $cfg.db.python)) { return [string]$cfg.db.python }
     }
   } catch { }
-  # 2) DSH 自带 python
-  $bundled = "C:\Users\11857\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe"
-  if (Test-Path $bundled) { return $bundled }
-  # 3) PATH 上的 python
+  # 2) 环境变量指定
+  if ($env:GOPS_PYTHON -and (Test-Path $env:GOPS_PYTHON)) { return [string]$env:GOPS_PYTHON }
+  # 3) 运行器自带 python（多路径探测）
+  $cands = @(
+    "C:\Users\11857\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe",
+    (Join-Path $env:LOCALAPPDATA "Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\python.exe"),
+    (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\python.exe"),
+    (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"),
+    (Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\python.exe")
+  )
+  foreach ($c in $cands) { if ($c -and (Test-Path $c)) { return $c } }
+  # 4) PATH 上的 python（WindowsApps 存根会在这里失败）
+  $cmd = Get-Command python.exe -ErrorAction SilentlyContinue
+  if ($cmd -and $cmd.Source -and ($cmd.Source -notmatch 'WindowsApps')) { return [string]$cmd.Source }
   return "python"
 }
 
