@@ -6,6 +6,45 @@ $script:WaDir = Join-Path $BaseDir "data"
 $script:WaJson = Join-Path $script:WaDir "wa_candidates.json"
 $script:WaCsv = Join-Path $script:WaDir "wa_candidates.csv"
 
+function Get-WaField($Item, [string]$Name, $Default = $null) {
+  if ($null -eq $Item) { return $Default }
+  if ($Item -is [System.Collections.IDictionary]) {
+    if ($Item.Contains($Name)) { return $Item[$Name] }
+    return $Default
+  }
+  if ($Item.PSObject.Properties.Name -contains $Name) { return $Item.$Name }
+  return $Default
+}
+
+function Set-WaField($Item, [string]$Name, $Value) {
+  if ($null -eq $Item) { return }
+  if ($Item -is [System.Collections.IDictionary]) {
+    $Item[$Name] = $Value
+    return
+  }
+  if ($Item.PSObject.Properties.Name -contains $Name) {
+    $Item.$Name = $Value
+  } else {
+    [void]($Item | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force)
+  }
+}
+
+function Initialize-WaItem($Item) {
+  if ($null -eq $Item) { return $Item }
+  $defaults = [ordered]@{
+    code = ""; name = ""; region = ""; lang = ""; purpose = "";
+    relevance = "pending"; status = "待验证"; join = "未加入";
+    note = ""; sources = @(); checkedAt = ""
+  }
+  foreach ($k in $defaults.Keys) {
+    $has = $false
+    if ($Item -is [System.Collections.IDictionary]) { $has = $Item.Contains($k) }
+    else { $has = ($Item.PSObject.Properties.Name -contains $k) }
+    if (-not $has) { Set-WaField $Item $k $defaults[$k] }
+  }
+  return $Item
+}
+
 function Get-WaConfig {
   $p = Join-Path $BaseDir "config.json"
   $cfg = $null
@@ -16,35 +55,47 @@ function Get-WaConfig {
 }
 
 function Get-WaState {
+  $o = $null
   if (Test-Path $script:WaJson) {
     try {
       $o = [System.IO.File]::ReadAllText($script:WaJson, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
-      if ($o -and $o.PSObject.Properties.Name -contains "items") { return $o }
-    } catch {}
+    } catch { $o = $null }
   }
-  return [pscustomobject]@{ savedAt = ""; queries = @(); items = @() }
+  if (-not $o) { $o = [pscustomobject]@{ savedAt = ""; queries = @(); items = @() } }
+  $hasItems = $false
+  if ($o -is [System.Collections.IDictionary]) { $hasItems = $o.Contains("items") }
+  else { $hasItems = ($o.PSObject.Properties.Name -contains "items") }
+  if (-not $hasItems) { Set-WaField $o "items" @() }
+  $items = @(Get-WaField $o "items" @())
+  foreach ($it in $items) { Initialize-WaItem $it | Out-Null }
+  Set-WaField $o "items" $items
+  return $o
 }
 
 function Save-WaState($state) {
+  if ($null -eq $state) { return }
   if (-not (Test-Path $script:WaDir)) { New-Item -ItemType Directory -Path $script:WaDir -Force | Out-Null }
-  $state.savedAt = (Get-Date).ToString("s")
+  Set-WaField $state "savedAt" ((Get-Date).ToString("s"))
+  $items = @(Get-WaField $state "items" @())
+  foreach ($it in $items) { Initialize-WaItem $it | Out-Null }
+  Set-WaField $state "items" $items
   $json = $state | ConvertTo-Json -Depth 8
   [System.IO.File]::WriteAllText($script:WaJson, $json, (New-Object System.Text.UTF8Encoding($false)))
   $rows = @()
-  foreach ($it in @($state.items)) {
+  foreach ($it in $items) {
     $rows += [pscustomobject]@{
-      "邀请码"   = $it.code
-      "群名"     = $it.name
-      "国家"     = $it.region
-      "语言"     = $it.lang
-      "用途"     = $it.purpose
-      "相关度"   = $it.relevance
-      "邀请链接" = "https://chat.whatsapp.com/" + $it.code
-      "来源页面" = ($it.sources -join " ")
-      "验证状态" = $it.status
-      "加群状态" = $it.join
-      "备注"     = $it.note
-      "核验时间" = $it.checkedAt
+      "邀请码"   = [string](Get-WaField $it "code" "")
+      "群名"     = [string](Get-WaField $it "name" "")
+      "国家"     = [string](Get-WaField $it "region" "")
+      "语言"     = [string](Get-WaField $it "lang" "")
+      "用途"     = [string](Get-WaField $it "purpose" "")
+      "相关度"   = [string](Get-WaField $it "relevance" "pending")
+      "邀请链接" = "https://chat.whatsapp.com/" + [string](Get-WaField $it "code" "")
+      "来源页面" = ((@(Get-WaField $it "sources" @()) | ForEach-Object { [string]$_ }) -join " ")
+      "验证状态" = [string](Get-WaField $it "status" "待验证")
+      "加群状态" = [string](Get-WaField $it "join" "未加入")
+      "备注"     = [string](Get-WaField $it "note" "")
+      "核验时间" = [string](Get-WaField $it "checkedAt" "")
     }
   }
   if ($rows.Count -gt 0) { $rows | Export-Csv -Path $script:WaCsv -NoTypeInformation -Encoding UTF8 }

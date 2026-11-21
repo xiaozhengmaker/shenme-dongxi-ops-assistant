@@ -133,7 +133,7 @@ if ($steamOn) {
       if (Skip-Requested "Steam") { Log "skip platform Steam"; break }
       Set-Pipe "Steam" "Reddit" "running" "" 1
       Log ("steam join " + $g)
-      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here "steam_join.ps1") -Group $g *>> $log
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here "steam_join.ps1") -Group $g *>&1 | Out-File -FilePath $log -Append -Encoding UTF8
       if (Stop-Requested) { Stop-Now "Steam" }
       if (Skip-Requested "Steam") { Log "skip platform Steam"; break }
       $sig = Wait-Signal "Steam" 600
@@ -164,7 +164,7 @@ if ($redditOn) {
   try { $rn = [int]$cfg.quotas.Reddit } catch { }
   if ($rn -gt 0 -and -not (Skip-Requested "Reddit")) {
     Log ("reddit run maxSubs=" + $rn)
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here "rd_run.ps1") -MaxSubs $rn *>> $log
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here "rd_run.ps1") -MaxSubs $rn *>&1 | Out-File -FilePath $log -Append -Encoding UTF8
     if (Stop-Requested) { Stop-Now "Reddit" }
   } elseif (Skip-Requested "Reddit") {
     Log "skip platform Reddit"
@@ -205,7 +205,7 @@ if ($waOn) {
       $waArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $here "wa_verify.ps1"), "-OneShot", "-TargetCode", $targetCode, "-Publisher", $publisher, "-PublisherWhitelist", $whitelist, "-MaxActions", "1")
       if ($allowJoin) { $waArgs += "-AllowJoin" } else { $waArgs += "-DryRun" }
       Log ("whatsapp one-shot " + $targetCode + " preview=" + [string](-not $allowJoin))
-      & powershell.exe @waArgs *>> $log
+      & powershell.exe @waArgs *>&1 | Out-File -FilePath $log -Append -Encoding UTF8
       $waExit = $LASTEXITCODE
       Log ("whatsapp one-shot exit=" + $waExit)
       if (Stop-Requested) { Stop-Now "WhatsApp" }
