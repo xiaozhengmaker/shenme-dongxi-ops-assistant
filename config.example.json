@@ -140,14 +140,18 @@
                },
     "memberSample":  {
                          "telegram":  {
+                                          "enabled":  true,
                                           "maxGroupsPerRound":  0,
                                           "budgetMin":  90,
-                                          "pageDelayMs":  900
+                                          "pageDelayMs":  900,
+                                          "maxRuntimeMin":  3
                                       },
                          "steam":  {
                                        "enabled":  true,
-                                       "maxRuntimeMin":  20,
-                                       "pageDelayMs":  3500
+                                       "maxGroupsPerRound":  0,
+                                       "budgetMin":  180,
+                                       "pageDelayMs":  1200,
+                                       "maxRuntimeMin":  15
                                    }
                      }
 }

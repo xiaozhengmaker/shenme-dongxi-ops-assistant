@@ -3845,7 +3845,7 @@ while ($listener.IsListening) {
 
 
 
-      Send-Json $ctx 200 @{ outputs = $cfg.outputs; schedule = $cfg.schedule; quotas = $cfg.quotas; platforms = $cfg.platforms; platformsEnabled = $cfg.platformsEnabled; behaviors = $cfg.behaviors; reserved = $cfg.reserved; notify = $cfg.notify; db = $dbInfo; ai = $aiOut; taskName = "DSH_SocialOps_Daily"; tasks = (Get-Tasks) }
+      Send-Json $ctx 200 @{ outputs = $cfg.outputs; memberSample = $cfg.memberSample; schedule = $cfg.schedule; quotas = $cfg.quotas; platforms = $cfg.platforms; platformsEnabled = $cfg.platformsEnabled; behaviors = $cfg.behaviors; reserved = $cfg.reserved; notify = $cfg.notify; db = $dbInfo; ai = $aiOut; taskName = "DSH_SocialOps_Daily"; tasks = (Get-Tasks) }
 
 
 
@@ -3860,6 +3860,42 @@ while ($listener.IsListening) {
 
 
 
+
+    if ($path -eq "/api/memberSample" -and $req.HttpMethod -eq "GET") {
+      Send-Json $ctx 200 @{ ok = $true; memberSample = $cfg.memberSample }
+      continue
+    }
+
+    if ($path -eq "/api/memberSample" -and $req.HttpMethod -eq "POST") {
+      $body = (New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)).ReadToEnd() | ConvertFrom-Json
+      $allowed = @("enabled", "maxGroupsPerRound", "budgetMin", "pageDelayMs", "maxRuntimeMin")
+      if (-not $cfg.memberSample) { $cfg.memberSample = [pscustomobject]@{} }
+      foreach ($pl in @("telegram", "steam")) {
+        $src = $null
+        try { $src = $body.$pl } catch { }
+        if (-not $src) { continue }
+        if (-not ($cfg.memberSample.PSObject.Properties.Name -contains $pl)) {
+          $cfg.memberSample | Add-Member -NotePropertyName $pl -NotePropertyValue ([pscustomobject]@{}) -Force
+        }
+        foreach ($k in $allowed) {
+          if (($src.PSObject.Properties.Name -contains $k) -and ($null -ne $src.$k)) {
+            $cur = $cfg.memberSample.$pl
+            if ($cur.PSObject.Properties.Name -contains $k) { $cur.$k = $src.$k }
+            else { $cur | Add-Member -NotePropertyName $k -NotePropertyValue $src.$k -Force }
+          }
+        }
+        $t = $cfg.memberSample.$pl
+        foreach ($nk in @("maxGroupsPerRound", "budgetMin", "pageDelayMs", "maxRuntimeMin")) {
+          if ($t.PSObject.Properties.Name -contains $nk) { $t.$nk = [int]$t.$nk }
+        }
+        if ($t.PSObject.Properties.Name -contains "enabled") { $t.enabled = [bool]$t.enabled } else { $t | Add-Member -NotePropertyName enabled -NotePropertyValue $true -Force }
+        if ($t.PSObject.Properties.Name -contains "maxGroupsPerRound" -and $t.maxGroupsPerRound -lt 0) { $t.maxGroupsPerRound = 0 }
+        if ($t.PSObject.Properties.Name -contains "budgetMin" -and $t.budgetMin -lt 1) { $t.budgetMin = 1 }
+      }
+      ($cfg | ConvertTo-Json -Depth 32) | Set-Content -Path $cfgPath -Encoding UTF8
+      Send-Json $ctx 200 @{ ok = $true; memberSample = $cfg.memberSample }
+      continue
+    }
 
     if ($path -eq "/api/config" -and $req.HttpMethod -eq "POST") {
 

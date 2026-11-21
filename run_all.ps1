@@ -159,40 +159,16 @@ Say ("--- 平台拓群结束（失败：" + $(if (@($res.failed).Count -gt 0) { 
 Set-Pipe "members" "steam" "running" ""
 if (-not $SkipMembers) {
   if (StoppedNow) { Set-Pipe "members" "" "stopped" ""; Say "stop signal -> 跳过成员采样"; Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null; exit 0 }
-  Say "--- TG 成员采样（sample_telegram，逐群按状态推进）"
+  Say "--- 成员样本（按 config.memberSample 各平台独立：开关/每轮上限/预算）"
   try {
-    . (Join-Path $baseDir "lib\member_sample.ps1")
-    $tgCatalog = @(Get-MemberCatalog $baseDir "Telegram")
-    $tgState = Read-MemberState $baseDir "telegram"
-      # 配额从 config.json 读取：memberSample.telegram.maxGroupsPerRound = 0 表示本轮不限（读完为止）
-      $msTg = $null
-      if ($cfg -and $cfg.memberSample -and $cfg.memberSample.telegram) { $msTg = $cfg.memberSample.telegram }
-      $tgBudgetMin = 25
-      $tgMaxGroups = 8
-      if ($msTg) {
-        if ($msTg.PSObject.Properties.Name -contains "budgetMin" -and $msTg.budgetMin) { $tgBudgetMin = [int]$msTg.budgetMin }
-        if ($msTg.PSObject.Properties.Name -contains "maxGroupsPerRound") { $tgMaxGroups = [int]$msTg.maxGroupsPerRound }
-      }
-      $tgBudget = (Get-Date).AddMinutes($tgBudgetMin)
-      $tgHandled = 0
-      $capText = $(if ($tgMaxGroups -le 0) { "不限" } else { [string]$tgMaxGroups })
-      Say ("  TG 采样参数：每轮上限 " + $capText + " 群 / 预算 " + $tgBudgetMin + " 分钟")
-    foreach ($g in $tgCatalog) {
-      if (StoppedNow) { Say "  stop signal -> 停止 TG 采样"; break }
-      if ((Get-Date) -gt $tgBudget) { Say "  TG 采样预算用尽（" + $tgBudgetMin + " 分钟）"; break }
-      if ($tgMaxGroups -gt 0 -and $tgHandled -ge $tgMaxGroups) { Say ("  TG 采样本轮上限 " + $tgMaxGroups + " 群"); break }
-      $k = [string]$g.key
-      if (-not $k) { continue }
-      $e = Get-MemberStateEntry $tgState $k
-      if ($e -and ($e.status -eq "done" -or $e.status -eq "permission_denied")) { continue }
-      $o = powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $baseDir "sample_telegram.ps1") -Target $k -MaxRuntimeMin 3 -PageDelayMs 900 2>&1
-      ($o | Select-String "RESULT:|page=" | Select-Object -Last 2) | ForEach-Object { Say ("  " + $k + " " + $_.Line) }
-      $tgHandled++
-      Start-Sleep -Milliseconds 700
+    . (Join-Path $baseDir "lib\member_run.ps1")
+    $msRes = @()
+    foreach ($pl in @("Telegram","Steam")) {
+      $r = Invoke-MemberSampling -BaseDir $baseDir -Platform $pl -Cfg $cfg -Say { param($m) Say $m } -Stopped { StoppedNow }
+      $msRes += $r
     }
-    $tgState = Read-MemberState $baseDir "telegram"
-    Say ("  TG 采样结束：本轮处理 " + $tgHandled + " 群")
-  } catch { Say ("  TG 采样异常：" + $_.Exception.Message) }
+    Say ("  成员样本汇总：" + (($msRes | ForEach-Object { $_.platform + " enabled=" + $_.enabled + " handled=" + $_.handled + " ok=" + $_.ok + " bad=" + $_.bad }) -join "；"))
+  } catch { Say ("  成员采样异常：" + $_.Exception.Message) }
 
   Say "--- 人数回填（含隐藏名单）"
   $out2 = powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $baseDir "tg_fix_counts.ps1") -IncludeHidden 2>&1
@@ -203,11 +179,7 @@ if (-not $SkipMembers) {
 Set-Pipe "steam" "db" "running" ""
 if (-not $SkipSteam) {
   if (StoppedNow) { Set-Pipe "steam" "" "stopped" ""; Say "stop signal -> 跳过 Steam"; Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null; exit 0 }
-  Say "--- Steam 成员抽样"
-  $pages = 1
-  if ($Fast) { $pages = 1 }
-  $out3 = powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $baseDir "steam_sample_all.ps1") -MaxPages $pages 2>&1
-  ($out3 | Select-String "DONE|WROTE|fail" | Select-Object -Last 3) | ForEach-Object { Say ("  " + $_.Line) }
+  # Steam 全量采样已并入上面的「成员样本」阶段；此处只做导入
 
   Say "--- 导入成员样本"
   $out4 = powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $baseDir "steam_to_users.ps1") 2>&1

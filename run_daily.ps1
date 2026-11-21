@@ -142,28 +142,15 @@ if ($steamOn) {
     }
   }
 }
-# 2.5) Steam 成员采样（sample_steam，每轮推进 1 个未完成群；只读 memberslistxml）
-$steamSampleOn = $true
-try { if ($cfg.memberSample -and ($cfg.memberSample.PSObject.Properties.Name -contains "Steam")) { $steamSampleOn = [bool]$cfg.memberSample.Steam } } catch { }
-if ($steamSampleOn) {
-  if (Stop-Requested) { Stop-Now "SteamSample" }
-  . (Join-Path $here "lib\member_sample.ps1")
-  $stState = Read-MemberState $here "steam"
-  $stTarget = ""
-  foreach ($g in @(Get-MemberCatalog $here "Steam")) {
-    $k = [string]$g.key
-    if (-not $k) { continue }
-    $e = Get-MemberStateEntry $stState $k
-    if (-not $e -or ($e.status -ne "done" -and $e.status -ne "permission_denied")) { $stTarget = $k; break }
-  }
-  if ($stTarget) {
-    Log ("steam member sample " + $stTarget)
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here "sample_steam.ps1") -Target $stTarget -MaxRuntimeMin 20 -PageDelayMs 3500 *>> $log
-    if (Stop-Requested) { Stop-Now "SteamSample" }
-    if (Skip-Requested "Steam") { Log "skip platform SteamSample" }
-  } else {
-    Log "steam member sample: no pending target (all done/permission_denied)"
-  }
+# 2.5) 成员样本（与拓群解耦；按 config.memberSample 各平台独立开关/上限/预算）
+if ($cfg.memberSample) {
+  if (Stop-Requested) { Stop-Now "MemberSample" }
+  . (Join-Path $here "lib\member_run.ps1")
+  try {
+    foreach ($pl in @("Telegram","Steam")) {
+      $null = Invoke-MemberSampling -BaseDir $here -Platform $pl -Cfg $cfg -Say { param($m) Log $m } -Stopped { Stop-Requested }
+    }
+  } catch { Log ("member sample error: " + $_.Exception.Message) }
 }
 Set-Pipe "Reddit" "WhatsApp" "running" "" 2
 
