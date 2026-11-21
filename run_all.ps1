@@ -164,13 +164,23 @@ if (-not $SkipMembers) {
     . (Join-Path $baseDir "lib\member_sample.ps1")
     $tgCatalog = @(Get-MemberCatalog $baseDir "Telegram")
     $tgState = Read-MemberState $baseDir "telegram"
-    $tgBudget = (Get-Date).AddMinutes(25)
-    $tgHandled = 0
-    $tgMaxGroups = 8
+      # 配额从 config.json 读取：memberSample.telegram.maxGroupsPerRound = 0 表示本轮不限（读完为止）
+      $msTg = $null
+      if ($cfg -and $cfg.memberSample -and $cfg.memberSample.telegram) { $msTg = $cfg.memberSample.telegram }
+      $tgBudgetMin = 25
+      $tgMaxGroups = 8
+      if ($msTg) {
+        if ($msTg.PSObject.Properties.Name -contains "budgetMin" -and $msTg.budgetMin) { $tgBudgetMin = [int]$msTg.budgetMin }
+        if ($msTg.PSObject.Properties.Name -contains "maxGroupsPerRound") { $tgMaxGroups = [int]$msTg.maxGroupsPerRound }
+      }
+      $tgBudget = (Get-Date).AddMinutes($tgBudgetMin)
+      $tgHandled = 0
+      $capText = $(if ($tgMaxGroups -le 0) { "不限" } else { [string]$tgMaxGroups })
+      Say ("  TG 采样参数：每轮上限 " + $capText + " 群 / 预算 " + $tgBudgetMin + " 分钟")
     foreach ($g in $tgCatalog) {
       if (StoppedNow) { Say "  stop signal -> 停止 TG 采样"; break }
-      if ((Get-Date) -gt $tgBudget) { Say "  TG 采样预算用尽（25 分钟）"; break }
-      if ($tgHandled -ge $tgMaxGroups) { Say ("  TG 采样本轮上限 " + $tgMaxGroups + " 群"); break }
+      if ((Get-Date) -gt $tgBudget) { Say "  TG 采样预算用尽（" + $tgBudgetMin + " 分钟）"; break }
+      if ($tgMaxGroups -gt 0 -and $tgHandled -ge $tgMaxGroups) { Say ("  TG 采样本轮上限 " + $tgMaxGroups + " 群"); break }
       $k = [string]$g.key
       if (-not $k) { continue }
       $e = Get-MemberStateEntry $tgState $k

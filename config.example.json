@@ -1,141 +1,153 @@
-{
-  "discord": {
-    "token": "",
-    "max_users_per_day": 2000,
-    "per_guild": 300,
-    "delay_ms": 1500,
-    "only_cs_guilds": true
-  },
-  "feishu": {
-    "app_id": "cli_xxxxxxxxxxxxxxxx",
-    "app_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "base_app_token": "bascnxxxxxxxxxxxxxxxxxxxxxx",
-    "table_id": "tblxxxxxxxxxxxxxx",
-    "table_name": "私域社群表",
-    "wiki_url": "https://<your-tenant>.feishu.cn/wiki/<wiki_token>?table=<table_id>&view=<view_id>",
-    "webhook": "https://open.feishu.cn/open-apis/bot/v2/hook/<hook-id>"
-  },
-  "platforms": [
-    "Facebook",
-    "Telegram",
-    "Discord",
-    "Reddit"
-  ],
-  "quotas": {
-    "Facebook": 5,
-    "Telegram": 20,
-    "Discord": 0,
-    "Reddit": 0
-  },
-  "reserved": [
-    "Reddit"
-  ],
-  "filters": {
-    "min_members": {
-      "Facebook": 1000,
-      "Telegram": 300,
-      "Discord": 500,
-      "Reddit": 1000
-    },
-    "recent_activity_days": 7,
-    "preferred_languages": [
-      "en"
-    ],
-    "skip_verification": true,
-    "exclude_keywords": [
-      "valORANT",
-      "Roblox",
-      "MEE6",
-      "OwO Bot",
-      "Discord Bots",
-      "Polymarket",
-      "Gartic",
-      "IlloJuan"
-    ],
-    "cs2_keywords": [
-      "cs2",
-      "csgo",
-      "counter-strike",
-      "skin",
-      "case",
-      "trade",
-      "market",
-      "gamble",
-      "roulette",
-      "upgrade",
-      "giveaway",
-      "faceit",
-      "premier",
-      "pug",
-      "lounge",
-      "开箱",
-      "皮肤",
-      "电竞"
-    ]
-  },
-  "report": {
-    "title": "📊 社群日报",
-    "platform_order": [
-      "Facebook",
-      "Telegram",
-      "Discord",
-      "Reddit"
-    ],
-    "card_color": "indigo",
-    "wan_threshold": 10000,
-    "k_threshold": 1000,
-    "decimals": 1,
-    "show_invalid_row": true,
-    "show_write_status": true
-  },
-  "outputs": {
-    "feishu": true,
-    "sqlite": false,
-    "csv": false,
-    "jsonl": false
-  },
-  "schedule": {
-    "enabled": true,
-    "time": "10:00"
-  },
-  "paths": {
-    "workdir": "D:\\DeepSeek\\运营",
-    "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "chrome_debug_profile": "D:\\ChromeFeishu\\profile",
-    "cdp_port": 9222
-  },
-  "queries": {
-    "Telegram": [
-      "csgo chat",
-      "cs2 trade",
-      "csgo trading",
-      "cs2 skins",
-      "cs2 market",
-      "cs2 community",
-      "cs2 chat",
-      "csgo trade"
-    ],
-    "Facebook": [
-      "cs2 trade",
-      "csgo trading",
-      "cs2 skins",
-      "cs2 buy sell trade"
-    ],
-    "Reddit": [
-      "r/GlobalOffensive",
-      "r/csgo",
-      "cs2 skins",
-      "csgo trade"
-    ]
-  },
-  "resume": {
-    "enabled": true,
-    "budget": 50,
-    "persist": true,
-    "min_members": 300
-  },
-  "naming": {
-    "enabled": true,
-    "from_receipt": true
-  }
+﻿{
+    "discord":  {
+                    "token":  "",
+                    "max_users_per_day":  2000,
+                    "per_guild":  300,
+                    "delay_ms":  1500,
+                    "only_cs_guilds":  true
+                },
+    "feishu":  {
+                   "app_id":  "cli_xxxxxxxxxxxxxxxx",
+                   "app_secret":  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                   "base_app_token":  "bascnxxxxxxxxxxxxxxxxxxxxxx",
+                   "table_id":  "tblxxxxxxxxxxxxxx",
+                   "table_name":  "私域社群表",
+                   "wiki_url":  "https://\u003cyour-tenant\u003e.feishu.cn/wiki/\u003cwiki_token\u003e?table=\u003ctable_id\u003e\u0026view=\u003cview_id\u003e",
+                   "webhook":  "https://open.feishu.cn/open-apis/bot/v2/hook/\u003chook-id\u003e"
+               },
+    "platforms":  [
+                      "Facebook",
+                      "Telegram",
+                      "Discord",
+                      "Reddit"
+                  ],
+    "quotas":  {
+                   "Facebook":  5,
+                   "Telegram":  20,
+                   "Discord":  0,
+                   "Reddit":  0
+               },
+    "reserved":  [
+                     "Reddit"
+                 ],
+    "filters":  {
+                    "min_members":  {
+                                        "Facebook":  1000,
+                                        "Telegram":  300,
+                                        "Discord":  500,
+                                        "Reddit":  1000
+                                    },
+                    "recent_activity_days":  7,
+                    "preferred_languages":  [
+                                                "en"
+                                            ],
+                    "skip_verification":  true,
+                    "exclude_keywords":  [
+                                             "valORANT",
+                                             "Roblox",
+                                             "MEE6",
+                                             "OwO Bot",
+                                             "Discord Bots",
+                                             "Polymarket",
+                                             "Gartic",
+                                             "IlloJuan"
+                                         ],
+                    "cs2_keywords":  [
+                                         "cs2",
+                                         "csgo",
+                                         "counter-strike",
+                                         "skin",
+                                         "case",
+                                         "trade",
+                                         "market",
+                                         "gamble",
+                                         "roulette",
+                                         "upgrade",
+                                         "giveaway",
+                                         "faceit",
+                                         "premier",
+                                         "pug",
+                                         "lounge",
+                                         "开箱",
+                                         "皮肤",
+                                         "电竞"
+                                     ]
+                },
+    "report":  {
+                   "title":  "📊 社群日报",
+                   "platform_order":  [
+                                          "Facebook",
+                                          "Telegram",
+                                          "Discord",
+                                          "Reddit"
+                                      ],
+                   "card_color":  "indigo",
+                   "wan_threshold":  10000,
+                   "k_threshold":  1000,
+                   "decimals":  1,
+                   "show_invalid_row":  true,
+                   "show_write_status":  true
+               },
+    "outputs":  {
+                    "feishu":  true,
+                    "sqlite":  false,
+                    "csv":  false,
+                    "jsonl":  false
+                },
+    "schedule":  {
+                     "enabled":  true,
+                     "time":  "10:00"
+                 },
+    "paths":  {
+                  "workdir":  "D:\\DeepSeek\\运营",
+                  "chrome":  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                  "chrome_debug_profile":  "D:\\ChromeFeishu\\profile",
+                  "cdp_port":  9222
+              },
+    "queries":  {
+                    "Telegram":  [
+                                     "csgo chat",
+                                     "cs2 trade",
+                                     "csgo trading",
+                                     "cs2 skins",
+                                     "cs2 market",
+                                     "cs2 community",
+                                     "cs2 chat",
+                                     "csgo trade"
+                                 ],
+                    "Facebook":  [
+                                     "cs2 trade",
+                                     "csgo trading",
+                                     "cs2 skins",
+                                     "cs2 buy sell trade"
+                                 ],
+                    "Reddit":  [
+                                   "r/GlobalOffensive",
+                                   "r/csgo",
+                                   "cs2 skins",
+                                   "csgo trade"
+                               ]
+                },
+    "resume":  {
+                   "enabled":  true,
+                   "budget":  50,
+                   "persist":  true,
+                   "min_members":  300
+               },
+    "naming":  {
+                   "enabled":  true,
+                   "from_receipt":  true
+               },
+    "memberSample":  {
+                         "telegram":  {
+                                          "maxGroupsPerRound":  0,
+                                          "budgetMin":  90,
+                                          "pageDelayMs":  900
+                                      },
+                         "steam":  {
+                                       "enabled":  true,
+                                       "maxRuntimeMin":  20,
+                                       "pageDelayMs":  3500
+                                   }
+                     }
 }
