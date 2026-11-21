@@ -61,3 +61,28 @@ function Get-PipelineStatusView {
   }
   return $o
 }
+
+
+function Sync-StaleRunState {
+  # In-memory hub state says "running" but the on-disk pipeline evidence says the
+  # whole run already ended. External scripts (scheduled run_daily/run_all) never
+  # call back into the hub, so reset the stale memory here.
+  param([string]$BaseDir, $State, [int]$GraceSec = 45)
+  try {
+    if (-not $State) { return $false }
+    if (-not $State.running) { return $false }
+    $view = Get-PipelineStatusView -BaseDir $BaseDir
+    $st = [string]$view.state
+    if ($st -ne "complete" -and $st -ne "failed" -and $st -ne "stopped") { return $false }
+    $upd = $null
+    try { if ($view.updated_at) { $upd = [datetime]::Parse([string]$view.updated_at) } } catch { }
+    if ($upd -and ((Get-Date) - $upd).TotalSeconds -lt $GraceSec) { return $false }
+    $State.running = $false
+    $State.phase = "idle"
+    $State.task = ""
+    $State.activePlatform = ""
+    $State.activeAt = ""
+    $State.current = "准备开始"
+    return $true
+  } catch { return $false }
+}

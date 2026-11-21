@@ -3162,6 +3162,7 @@ while ($listener.IsListening) {
 
 
     if ($path -eq "/api/live") {
+      $null = Sync-StaleRunState -BaseDir $here -State $state
 
 
 
@@ -3338,6 +3339,7 @@ while ($listener.IsListening) {
 
 
     if ($path -eq "/state") {
+      $null = Sync-StaleRunState -BaseDir $here -State $state
 
 
 

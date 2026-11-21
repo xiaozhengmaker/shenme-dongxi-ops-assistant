@@ -46,7 +46,7 @@ function Invoke-MemberSampling {
     $k = [string]$g.key
     if (-not $k) { continue }
     $e = Get-MemberStateEntry $state $k
-    if ($e -and ($e.status -eq "done" -or $e.status -eq "permission_denied")) { continue }
+    if ($e -and ($e.status -eq "done" -or $e.status -eq "permission_denied" -or $e.status -eq "dead")) { continue }
     $pending.Add($k)
   }
   $capText = $(if ($c.maxGroupsPerRound -le 0) { "不限" } else { [string]$c.maxGroupsPerRound })
