@@ -77,6 +77,11 @@ function Sync-StaleRunState {
     $upd = $null
     try { if ($view.updated_at) { $upd = [datetime]::Parse([string]$view.updated_at) } } catch { }
     if ($upd -and ((Get-Date) - $upd).TotalSeconds -lt $GraceSec) { return $false }
+      # 只接受「在本轮开始之后才结束」的整轮证据；更早的完成记录属于上一轮
+      # （例如计划任务 10:00 那一轮），不能用来证明 hub 当前这轮已结束。
+      $startedLocal = $null
+      try { if ($State.started) { $startedLocal = [datetime]$State.started } } catch { }
+      if ($upd -and $startedLocal -and $upd -le $startedLocal) { return $false }
     $State.running = $false
     $State.phase = "idle"
     $State.task = ""
