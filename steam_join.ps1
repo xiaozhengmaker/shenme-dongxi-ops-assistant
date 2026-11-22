@@ -1,7 +1,7 @@
 ﻿param(
   [Parameter(Mandatory=$true)][string]$Group,
   [int]$Port = 9222,
-  [string]$Match = "steamcommunity.com",
+  [string]$Match = "steamcommunity.com/groups/",
   [int]$WaitSec = 6,
   [switch]$DryRun,
   [switch]$Offline
@@ -32,6 +32,13 @@ function Eval([string]$js) {
   try { return ($raw | ConvertFrom-Json).result.value } catch { return $null }
 }
 
+function Clear-DedicatedTab {
+  try {
+    $nav = @{ url = "about:blank" } | ConvertTo-Json -Compress
+    & $cdp -Method "Page.navigate" -ParamsJson $nav -Match $Match | Out-Null
+    Log "CLEANUP tab -> about:blank"
+  } catch { }
+}
 $url = "https://steamcommunity.com/groups/$Group/"
 Log "NAV $url"
 $nav = @{ url = $url } | ConvertTo-Json -Compress
@@ -41,6 +48,7 @@ Start-Sleep -Seconds 6
 $probe = @'
 JSON.stringify({
   title: document.title,
+  errPage: /Steam Community :: Error/i.test(document.title || ''),
   name: (function(){var e=document.querySelector('.grouppage_header_name');return e?e.innerText.trim():'';})(),
   joinForm: !!document.getElementById('join_group_form'),
   isMember: (document.body.innerText||'').includes('您是该组成员') || (document.body.innerText||'').includes('You are a member'),
@@ -51,13 +59,29 @@ JSON.stringify({
 $before = Eval $probe
 Log "BEFORE $before"
 
-$b = $before | ConvertFrom-Json
-if ($b.isMember) { Log "SKIP 已是成员"; exit 0 }
-if ($b.pending) { Log "SKIP 已待审批（不再提交）"; exit 0 }
-if (-not $b.joinForm) { Log "SKIP 无 join_group_form（可能需要邀请/私密组）"; exit 0 }
-if ($DryRun) { Log "DRY RUN 可加入"; exit 0 }
-if (Test-WorkerStop $root) { Log "SKIP stop signal before submit"; exit 0 }
+$b = $null
+try { if ($before) { $b = $before | ConvertFrom-Json } } catch { }
+$nameBefore = if ($b -and $b.name) { [string]$b.name } else { "" }
+if ($b -and ([bool]$b.leaveBtn -or [bool]$b.isMember)) {
+  Log "SKIP 已是成员（BEFORE leaveBtn/isMember，不提交）"
+  $outcome = "already_member"; $name = $nameBefore; $skipSubmit = $true
+} elseif ($b -and $b.pending) {
+  Log "SKIP 已待审批（不再提交）"
+  $outcome = "pending"; $name = $nameBefore; $skipSubmit = $true
+} elseif (-not $b -or -not $b.joinForm) {
+  Log "SKIP 无 join_group_form（可能需要邀请/私密组或页面未加载）"
+  $outcome = "unknown"; $name = $nameBefore; $skipSubmit = $true
+} elseif ($DryRun) {
+  Log "DRY RUN 可加入（已是成员会被上面拦住）"
+  $outcome = "dry_run"; $name = $nameBefore; $skipSubmit = $true
+} elseif (Test-WorkerStop $root) {
+  Log "SKIP stop signal before submit"
+  $outcome = "unknown"; $name = $nameBefore; $skipSubmit = $true
+} else {
+  $skipSubmit = $false
+}
 
+if (-not $skipSubmit) {
 Log "JOIN submit join_group_form"
 $submit = @'
 (function(){var f=document.getElementById('join_group_form'); if(!f) return 'no-form'; f.submit(); return 'submitted';})()
@@ -71,6 +95,9 @@ Log "AFTER $after"
 $a = $null
 try { if ($after) { $a = $after | ConvertFrom-Json } } catch { }
 $outcome = Get-SteamJoinOutcome -Before $b -After $a -AfterText ([string]$after)
+}
+if (-not $outcome) { $outcome = "unknown" }
+if ($a -and $a.errPage) { Log "NOTE Steam 返回错误页（通常=重复加入/已是成员），按 already_member_or_unknown 记录" }
 Log ("RESULT " + $outcome + " group=$Group")
 
 # 上报到 hub 的运行实况（离线测试 / -Offline 时不发任何请求）
@@ -89,8 +116,10 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 if (-not (Test-Path $csv)) {
   [System.IO.File]::WriteAllText($csv, "时间,群ID,群名,结果,来源`r`n", $utf8bom)
 }
-$name = if ($a) { [string]$a.name } else { "" }
+$name = if ($a -and $a.name) { [string]$a.name } elseif ($nameBefore) { $nameBefore } else { "" }
 $line = "$stamp,$Group,$name,$outcome,手动风控试加`r`n"
 [System.IO.File]::AppendAllText($csv, $line, $utf8)
 Log "WROTE $csv"
+Clear-DedicatedTab
 if ($outcome -eq "not_joined") { exit 3 }
+exit 0
