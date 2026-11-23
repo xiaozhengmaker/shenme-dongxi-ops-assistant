@@ -449,6 +449,7 @@ try {
 . (Join-Path $here "lib\member_sample.ps1")
 
 . (Join-Path $here "lib\run_summary.ps1")
+. (Join-Path $here "lib\kw_stats.ps1")
 
 
 
@@ -52114,7 +52115,7 @@ while ($listener.IsListening) {
 
 
 
-        foreach ($q in @(Get-Keywords $Platform)) { $state.queries.Enqueue($q) }
+        foreach ($q in @(Get-KwRanked -BaseDir $here -Platform $Platform -Keywords @(Get-Keywords $Platform))) { $state.queries.Enqueue($q) }
 
 
 
@@ -52338,7 +52339,7 @@ while ($listener.IsListening) {
 
 
 
-        foreach ($q in @(Get-Keywords $Platform)) { $state.queries.Enqueue($q) }
+        foreach ($q in @(Get-KwRanked -BaseDir $here -Platform $Platform -Keywords @(Get-Keywords $Platform))) { $state.queries.Enqueue($q) }
 
 
 
@@ -57148,7 +57149,10 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
-        if ($rawN -eq 0) { $state.zeroStreak++ } else { $state.zeroStreak = 0 }
+        $kwKnownGood = $false
+        try { $kwKnownGood = Test-KwStatKnownGood -BaseDir $here -Platform $Platform -Keyword ([string]$q) } catch { }
+        if ($rawN -eq 0 -and $kwKnownGood) { $state.zeroStreak++ } else { $state.zeroStreak = 0 }
+        try { $null = Register-KwResult -BaseDir $here -Platform $Platform -Keyword ([string]$q) -Raw ([int]$rawN) -Added ([int]$cnt) -Failed $false } catch { }
 
 
 
