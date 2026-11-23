@@ -448,6 +448,8 @@ try {
 
 . (Join-Path $here "lib\member_sample.ps1")
 
+. (Join-Path $here "lib\run_summary.ps1")
+
 
 
 
@@ -12199,6 +12201,17 @@ function Build-JoinQueue {
         if (-not $state.ContainsKey("filtered")) { $state.filtered = 0 }
         $state.filtered = [int]$state.filtered + $cut
         Write-Host ("[hub] 过滤已入库 " + $cut + " 个（飞书表已存在）")
+        # 池里已无「合格且未入库」的项 => 清空池，让下一轮自动改走搜索补池
+        if (@($list).Count -eq 0 -and @($pooled).Count -gt 0) {
+          try {
+            $keep = @($pooled | Where-Object {
+              (Test-PoolItemEligible $_ $Platform) -and (-not $existSet.ContainsKey((Get-GroupRecordKey -Platform $Platform -Target $_)))
+            })
+            Save-PoolItems $Platform $keep | Out-Null
+            Write-Host ("[hub] 池已耗尽：清理 " + $cut + " 个已入库项，保留 " + @($keep).Count + " 个（下轮自动搜索补池）")
+            Add-Event ("池已耗尽：清理已入库项 " + $cut + "，下轮将搜索补池")
+          } catch { }
+        }
         Add-Event ("过滤已入库 " + $cut + " 个（飞书表已存在）")
       }
     }
@@ -44725,7 +44738,7 @@ while ($listener.IsListening) {
 
 
 
-    try { . (Join-Path $here "lib\run_summary.ps1"); $lr = Get-RunSummary -BaseDir $here; Send-Json $ctx 200 @{ ok = $true; lastRun = $lr } } catch { Send-Json $ctx 500 @{ ok = $false; error = $_.Exception.Message } }
+    try { $lr = Get-RunSummary -BaseDir $here; Send-Json $ctx 200 @{ ok = $true; lastRun = $lr } } catch { Send-Json $ctx 500 @{ ok = $false; error = $_.Exception.Message } }
 
 
 
