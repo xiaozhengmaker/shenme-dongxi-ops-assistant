@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -159,7 +159,8 @@
         <table><thead><tr><th style="width:120px">平台</th><th style="width:100px">本轮读取</th><th style="width:150px">每轮上限</th><th style="width:130px">预算(分钟)</th><th>说明</th></tr></thead>
           <tbody id="msBody"></tbody>
         </table>
-        <div class="row" style="margin-top:10px"><button class="btn" id="msSave">保存采样设置</button><span class="muted" id="msMsg"></span></div>
+        <div id="msProg" style="margin-top:14px"></div>
+        <div class="row" style="margin-top:10px"><button class="btn" id="msSave">保存采样设置</button><button class="btn ghost" id="msRefresh" style="margin-left:8px">刷新进度</button><span class="muted" id="msMsg"></span></div>
         <div class="muted" style="margin-top:6px">说明：上限 0 表示「本轮不限，读到没有待采为止」；预算到点会提前停。Telegram 建议 3 分钟/群，Steam 15 分钟/群（全量 XML 分页）。</div>
       </section>
     </div>
@@ -307,7 +308,49 @@
   function esc(s) { return String(s == null ? "" : s); }
   var LABEL = { telegram: "Telegram", steam: "Steam" };
   var NOTE = { telegram: "风控低，可设 0 读完", steam: "全量 XML，36 群约 1.5 小时" };
-  var CUR = null;
+  var CUR = null, PROG = null;
+  var ST_TXT = { done: "已采", pending: "待采", dead: "已失效", permission_denied: "无权限", rate_limited: "限流暂停", running: "采集中" };
+  function pct(a, b) { return b > 0 ? Math.round(a * 100 / b) : 0; }
+  function paintProg() {
+    var host = q("msProg");
+    if (!host) return;
+    var ps = (PROG && PROG.platforms) || [];
+    if (!ps.length) { host.innerHTML = '<div class="muted">暂无进度数据</div>'; return; }
+    host.innerHTML = ps.map(function (p) {
+      var opts = p.options || [];
+      var cnt = { done: 0, pending: 0, dead: 0, permission_denied: 0, rate_limited: 0, running: 0 };
+      var last = null;
+      opts.forEach(function (o) {
+        var s = String(o.status || "pending");
+        if (!(s in cnt)) { s = "pending"; }
+        cnt[s]++;
+        var t = o.updated_at || o.last_at || "";
+        if (t && (!last || t > last)) { last = t; }
+      });
+      var total = opts.length, fin = cnt.done + cnt.dead + cnt.permission_denied;
+      var w = pct(fin, total);
+      var st = p.state || {};
+      var stateLine = st.running ? ("正在采 " + (st.target_name || st.target || "—"))
+        : (st.status ? ("上一轮：" + (ST_TXT[st.status] || st.status) + " · " + (st.target_name || st.target || "—")
+          + (st.updated_at ? " · " + String(st.updated_at).replace("T", " ").slice(0, 16) : ""))
+          : "尚未运行");
+      return '<div style="margin:8px 0 4px 0">' +
+        '<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">' +
+        '<b>' + (LABEL[p.platform.toLowerCase()] || p.platform) + '</b>' +
+        '<span class="muted">目录 ' + total + ' 群 · 已采 <b style="color:#0f766e">' + cnt.done + '</b> · 待采 <b style="color:#b45309">' + cnt.pending + '</b>' +
+        (cnt.dead ? ' · 失效 ' + cnt.dead : '') + (cnt.permission_denied ? ' · 无权限 ' + cnt.permission_denied : '') + '</span>' +
+        '<span class="muted" style="margin-left:auto">' + w + '%</span></div>' +
+        '<div style="height:6px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-top:4px">' +
+        '<div style="height:6px;width:' + w + '%;background:#0f766e"></div></div>' +
+        '<div class="muted" style="margin-top:3px;font-size:12px">' + stateLine + '</div>' +
+        '</div>';
+    }).join("");
+  }
+  function loadProg() {
+    fetch(HUB + "/api/members", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+      PROG = d; paintProg();
+    }).catch(function (e) { var h = q("msProg"); if (h) { h.innerHTML = '<div class="muted">进度读取失败：' + esc(e.message) + '</div>'; } });
+  }
   function paint() {
     var ms = (CUR && CUR.memberSample) || {};
     var keys = ["telegram", "steam"];
@@ -329,7 +372,10 @@
     fetch(HUB + "/api/memberSample", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
       CUR = d; paint();
     }).catch(function (e) { q("msMsg").textContent = "读取失败：" + e.message; });
+    loadProg();
   }
+  var mr = q("msRefresh");
+  if (mr) { mr.onclick = function () { loadProg(); }; }
   q("msSave").onclick = function () {
     var body = {};
     Array.prototype.forEach.call(document.querySelectorAll("#msBody tr"), function (tr) {
