@@ -450,6 +450,7 @@ try {
 
 . (Join-Path $here "lib\run_summary.ps1")
 . (Join-Path $here "lib\kw_stats.ps1")
+. (Join-Path $here "lib\neg_cache.ps1")
 
 
 
@@ -12215,6 +12216,18 @@ function Build-JoinQueue {
         }
         Add-Event ("过滤已入库 " + $cut + " 个（飞书表已存在）")
       }
+    }
+  } catch { }
+  # 负面缓存过滤：24h 内判定为 not_found 的群不再重试（省请求）
+  try {
+    $b2 = @($list).Count
+    $list = @($list | Where-Object { -not (Test-NegCached -BaseDir $here -Platform $Platform -User ([string]$_.u)) })
+    $cut2 = $b2 - @($list).Count
+    if ($cut2 -gt 0) {
+      if (-not $state.ContainsKey("skipped")) { $state.skipped = 0 }
+      $state.skipped = [int]$state.skipped + $cut2
+      Write-Host ("[hub] 负面缓存跳过 " + $cut2 + " 个")
+      Add-Event ("负面缓存跳过 " + $cut2 + " 个（24h 内已知无效）")
     }
   } catch { }
   # 二重保险：候选池/搜索结果里若含跳过名单内的群，这里再剔一次
@@ -58049,6 +58062,11 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
+                try {
+          if ($tgt -and [string]$tgt.u -and ($v -eq "not_found" -or $v -eq "approval" -or $v -eq "request_sent")) {
+            Set-NegEntry -BaseDir $here -Platform $Platform -User ([string]$tgt.u) -Reason ([string]$v)
+          }
+        } catch { }
         if ($v -eq "joined" -or $v -eq "already") {
 
 
