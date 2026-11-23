@@ -225,4 +225,11 @@ if (-not $SkipLeads) {
 
 Set-Pipe "" "" "complete" ""
 Complete-RunControl -BaseDir $baseDir -RunId $runId | Out-Null
-Say "=== run_all 全部完成 ==="
+if ($true) {
+  try {
+    . (Join-Path $baseDir "lib\run_summary.ps1")
+    $rsReasons = @(Get-RunReasonFromLog -LogPath $script:LogFile -Tail 600)
+    $rsOk = ($fail.Count -eq 0)
+    $null = Write-RunSummary -BaseDir $baseDir -RunId $runId -StartedAt $pipe.started_at -Ok $rsOk -Code $(if ($rsOk) { "complete" } else { "failed" }) -Reasons $rsReasons -Platforms $Platforms -Errors @($fail)
+  } catch { Say ("run summary failed: " + $_.Exception.Message) }
+}Say "=== run_all 全部完成 ==="

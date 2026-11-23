@@ -1,4 +1,4 @@
-
+﻿
 // —— 扩展上下文守卫：扩展被重新加载后，已打开的页面会失去 chrome.* API ——
 function ctxAlive() { try { return !!(window.chrome && chrome.runtime && chrome.runtime.id); } catch (e) { return false; } }
 let CTX_ALIVE = ctxAlive();
@@ -825,6 +825,29 @@ setInterval(loadMembers, 5000);
 setInterval(refreshLive, 2000);
 setInterval(function () { renderStatusBar(LIVE, LIVE_AT); }, 1000);
 setTimeout(refreshLive, 600);
+// 上次运行总结：让「为什么停」在侧边栏一眼可见
+async function loadLastRun() {
+  try {
+    const r = await fetch(HUB + "/api/lastrun", { cache: "no-store" });
+    const d = await r.json();
+    const lr = d && d.lastRun;
+    const box = document.getElementById("lastrunbox");
+    if (!box) { return; }
+    if (!lr) { box.style.display = "none"; return; }
+    box.style.display = "block";
+    const ok = lr.ok === true;
+    const pill = document.getElementById("lrOk");
+    pill.textContent = ok ? "完成" : "未完成";
+    pill.className = "live-pill" + (ok ? "" : " stop");
+    const started = String(lr.started_at || "").replace("T", " ").slice(5, 16);
+    const ended = String(lr.ended_at || "").replace("T", " ").slice(11, 16);
+    document.getElementById("lrMeta2").textContent =
+      started + " → " + ended + (lr.duration_min == null ? "" : (" · " + lr.duration_min + " 分钟"));
+    document.getElementById("lrReason2").textContent = lr.reason || "—";
+  } catch (e) { }
+}
+loadLastRun();
+setInterval(loadLastRun, 15000);
 setInterval(() => { loadSummary().then(refresh); }, 15000);
 if (CTX_ALIVE) {
   setInterval(refreshPlatLights, 10000);

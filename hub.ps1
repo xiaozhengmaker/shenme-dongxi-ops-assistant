@@ -5575,7 +5575,12 @@ while ($listener.IsListening) {
 
 
 
-    if ($path -eq "/api/members" -and $req.HttpMethod -eq "GET") {
+    if ($path -eq "/api/lastrun" -and $req.HttpMethod -eq "GET") {
+    try { . (Join-Path $here "lib\run_summary.ps1"); $lr = Get-RunSummary -BaseDir $here; Send-Json $ctx 200 @{ ok = $true; lastRun = $lr } } catch { Send-Json $ctx 500 @{ ok = $false; error = $_.Exception.Message } }
+    continue
+  }
+
+  if ($path -eq "/api/members" -and $req.HttpMethod -eq "GET") {
 
       try {
         Send-Json $ctx 200 (Get-MemberOverview $here)

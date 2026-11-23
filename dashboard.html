@@ -251,6 +251,10 @@
       <div class="spacer"></div>
       <div class="kv" style="color:#8F959E" id="runState">—</div>
     </div>
+    <div id="lastRunBar" style="display:none;margin:0 0 14px 0;padding:10px 14px;border-radius:10px;background:#F7F8FA;border:1px solid #E5E6EB;font-size:13px;line-height:1.5">
+      <b id="lrTitle">上次运行</b> <span id="lrMeta" style="color:#8F959E"></span>
+      <div id="lrReason" style="margin-top:3px"></div>
+    </div>
 
     <div class="grid">
       <div class="card">
@@ -412,7 +416,29 @@ function render(){
   const quota = enabled.reduce(function(s,k){ return s + (Number(qm[platName(k)]) || 0); }, 0);
   document.getElementById('todayProgress').textContent = t.todayGroups + ' / ' + (quota||0);
   document.getElementById('todayBar').style.width = quota ? Math.min(100, t.todayGroups/quota*100) + '%' : '0%';
-  document.getElementById('runState').textContent = (DATA.running? '运行中 · ':'') + (DATA.phase||'idle');
+  document.getElementById('runState').textContent = (DATA.running? '运行中 · ':'') + (DATA.phase||'idle');
+    try {
+      fetch('http://127.0.0.1:8787/api/lastrun?t=' + Date.now()).then(function (r) { return r.json(); }).then(function (d) {
+        var lr = d && d.lastRun;
+        var bar = document.getElementById('lastRunBar');
+        if (!bar) { return; }
+        if (!lr) { bar.style.display = 'none'; return; }
+        bar.style.display = 'block';
+        var started = String(lr.started_at || '').replace('T',' ').slice(0,16);
+        var ended = String(lr.ended_at || '').replace('T',' ').slice(11,16);
+        var dur = (lr.duration_min == null ? '' : (' · 用时 ' + lr.duration_min + ' 分钟'));
+        document.getElementById('lrMeta').textContent = started + ' → ' + ended + dur;
+        var ok = (lr.ok === true);
+        bar.style.background = ok ? '#F0FBF6' : '#FFF5F5';
+        bar.style.borderColor = ok ? '#D6F0E3' : '#FFD8D8';
+        document.getElementById('lrTitle').textContent = ok ? '上次运行 · 完成' : '上次运行 · 未完成';
+        document.getElementById('lrTitle').style.color = ok ? '#0f766e' : '#b91c1c';
+        var tg = (lr.members && lr.members.telegram) || {};
+        var st = (lr.members && lr.members.steam) || {};
+        var extra = 'TG 已采 ' + (tg.done||0) + ' · Steam 已采 ' + (st.done||0) + (st.rate_limited ? ('（限流 ' + st.rate_limited + '）') : '');
+        document.getElementById('lrReason').textContent = '原因：' + (lr.reason || '—') + '　｜　' + extra;
+      }).catch(function () { });
+    } catch (e) { }
 try { syncRunButtons(DATA); } catch(e) {}
 
   drawChart();

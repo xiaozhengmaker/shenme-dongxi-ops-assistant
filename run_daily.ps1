@@ -224,5 +224,11 @@ if ($waOn) {
 if (Stop-Requested) { Stop-Now "final" }
 Complete-RunControl -BaseDir $here -RunId $runId | Out-Null
 Set-Pipe "" "" "complete" "" $steps.Count
+try {
+  . (Join-Path $here "lib\run_summary.ps1")
+  $rsReasons = @(Get-RunReasonFromLog -LogPath $log -Tail 600)
+  $rsOk = ($rsReasons -notcontains "采样有失败目标")
+  $null = Write-RunSummary -BaseDir $here -RunId $runId -StartedAt $pipe.started_at -Ok $rsOk -Code "complete" -Reasons $rsReasons -Platforms $steps
+} catch { Log ("run summary failed: " + $_.Exception.Message) }
 Log "run_daily complete"
 exit 0
