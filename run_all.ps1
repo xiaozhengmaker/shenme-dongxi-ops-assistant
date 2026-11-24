@@ -45,6 +45,16 @@ $fail = @()
 $script:pipePath = Get-PipelineStatusPath -BaseDir $baseDir
 $script:pipe = New-PipelineStatus -RunId ("run_all-" + (Get-Date).ToString("yyyyMMdd-HHmmss") + "-" + $PID) -Platforms $Platforms
 $runId = [string]$script:pipe.run_id
+$global:GOPS_SUMMARY = @{ Done = $false; BaseDir = $baseDir; RunId = $runId; StartedAt = $script:pipe.started_at }
+Register-EngineEvent -SourceIdentifier PowerShell.Exiting -SupportEvent -Action {
+  try {
+    $g = $global:GOPS_SUMMARY
+    if ($g -and (-not $g.Done)) {
+      . (Join-Path $g.BaseDir "lib\run_summary.ps1")
+      $null = Write-RunSummary -BaseDir $g.BaseDir -RunId $g.RunId -StartedAt $g.StartedAt -Ok $false -Code "aborted" -Reason "脚本未走到收尾就退出（异常/强制终止）"
+    }
+  } catch { }
+} | Out-Null
 function Set-Pipe([string]$current, [string]$next, [string]$state, [string]$err) {
   try {
     $script:pipe.updated_at = (Get-Date).ToString("o")
@@ -61,8 +71,17 @@ function StoppedNow {
   return (Test-RunStopRequested -BaseDir $baseDir -RunId $runId)
 }
 
-# 0) 手动停止优先：stop.flag 存在时本轮不发任何启动请求
-if (Test-GOpsStop $baseDir) { Set-Pipe "stop" "" "stopped" ""; Say "stop flag -> 退出"; exit 0 }
+# ---- 统一收尾：所有退出路径都写一份 run_summary（含 run_id / code / 失败项）----
+function Finish-Summary([string]$Code, [bool]$Ok = $false, [string]$Reason = "", [string[]]$Reasons = @(), [string[]]$Errors = @()) {
+  try {
+    . (Join-Path $baseDir "lib\run_summary.ps1")
+    $ar = @(); if ($Reason) { $ar += $Reason }; if ($Reasons) { $ar += $Reasons }
+    $null = Write-RunSummary -BaseDir $baseDir -RunId $runId -StartedAt $script:pipe.started_at -Ok $Ok -Code $Code -Reason $Reason -Reasons @($ar) -Platforms $Platforms -Errors @($Errors)
+    $global:GOPS_SUMMARY.Done = $true
+  } catch { Say ("run summary failed: " + $_.Exception.Message) }
+}
+
+if (Test-GOpsStop $baseDir) { Set-Pipe "stop" "" "stopped" ""; Say "stop flag -> 退出"; Finish-Summary -Code "stopped" -Ok $true -Reason "手动停止（stop.flag 存在），本轮未启动"; exit 0 }
 
 # 0.1) 配置：只跑本轮已启用的平台
 $cfg = $null
@@ -77,11 +96,11 @@ $Platforms = @($Platforms | ForEach-Object { $_ -split "," } | ForEach-Object { 
 if ($enabled.Count -gt 0) {
   $Platforms = @($Platforms | Where-Object { $enabled.ContainsKey($_) -and $enabled[$_] })
 }
-if ($Platforms.Count -eq 0) { Set-Pipe "" "" "complete" ""; Say "没有已启用平台，退出"; exit 0 }
+if ($Platforms.Count -eq 0) { Set-Pipe "" "" "complete" ""; Say "没有已启用平台，退出"; Finish-Summary -Code "no_platforms" -Ok $true -Reason "没有已启用平台"; exit 0 }
 $script:pipe = New-PipelineStatus -RunId $runId -Platforms $Platforms
 $script:runRegistered = $false
 $reg = Register-RunControl -BaseDir $baseDir -RunId $runId -Platforms $Platforms -Current ([string]$Platforms[0])
-if (-not $reg.ok) { Say ("已有运行中的 run，退出：" + [string]$reg.run_id); exit 0 }
+if (-not $reg.ok) { Say ("已有运行中的 run，退出：" + [string]$reg.run_id); Finish-Summary -Code "already_running" -Ok $false -Reason ("已有运行中的 run：" + [string]$reg.run_id); exit 0 }
 $script:runRegistered = $true
 $env:GOPS_RUN_ID = $runId
 Set-Pipe "self_check" ([string]$Platforms[0]) "running" ""
@@ -93,6 +112,9 @@ if (-not $SkipSelfCheck) {
   Say ("check.ps1 -> " + $chkLast)
   if ($chkLast -notmatch "可以开工") {
     Set-Pipe "self_check" "" "failed" "check_failed"
+    $chkFails = @($chk | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -match "^\[!!\]" } | Select-Object -First 6)
+    $chkReason = "自检未通过（" + @($chkFails).Count + " 项），见 reasons/errors"
+    Finish-Summary -Code "check_failed" -Ok $false -Reason $chkReason -Reasons @($chkFails) -Errors @($chkFails)
     Say "自检未通过，中止（先处理红灯）"
     Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null
     exit 3
@@ -142,6 +164,7 @@ $script:pipe.completed = [math]::Max(0, @($Platforms).Count - @($res.failed).Cou
 if ($res.status -eq "stopped") {
   Set-Pipe "platform_scan" "" "stopped" ""
   Say "stop signal -> 退出"
+  Finish-Summary -Code "stopped" -Ok $true -Reason "用户停止（运行中被要求停止）"
   try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true } | Out-Null } catch { }
   Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null
   exit 0
@@ -149,6 +172,7 @@ if ($res.status -eq "stopped") {
 if ($res.status -eq "global_failure") {
   Set-Pipe "platform_scan" "" "failed" ([string]$res.error)
   Say ("全局故障，中止本轮：" + [string]$res.error)
+  Finish-Summary -Code "global_failure" -Ok $false -Reason ("全局故障：" + [string]$res.error) -Errors @([string]$res.error)
   try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true } | Out-Null } catch { }
   Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null
   exit 4
@@ -210,7 +234,7 @@ if ($autoReport) {
 }
 
 try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true } | Out-Null } catch { }
-if ($fail.Count -gt 0) { Set-Pipe "done" "" "failed" ($fail -join ","); Say ("=== run_all 结束，失败平台：" + ($fail -join ",") + " ==="); Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null; exit 4 }
+if ($fail.Count -gt 0) { Set-Pipe "done" "" "failed" ($fail -join ","); Finish-Summary -Code "failed" -Ok $false -Reason ("失败平台：" + ($fail -join ",")) -Errors @($fail); Say ("=== run_all 结束，失败平台：" + ($fail -join ",") + " ==="); Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null; exit 4 }
 Set-Pipe "leads" "" "running" ""
 if (-not $SkipLeads) {
   if (StoppedNow) { Set-Pipe "leads" "" "stopped" ""; Say "stop signal present, skip leads" }
@@ -225,11 +249,5 @@ if (-not $SkipLeads) {
 
 Set-Pipe "" "" "complete" ""
 Complete-RunControl -BaseDir $baseDir -RunId $runId | Out-Null
-if ($true) {
-  try {
-    . (Join-Path $baseDir "lib\run_summary.ps1")
-    $rsReasons = @(Get-RunReasonFromLog -LogPath $script:LogFile -Tail 600)
-    $rsOk = ($fail.Count -eq 0)
-    $null = Write-RunSummary -BaseDir $baseDir -RunId $runId -StartedAt $pipe.started_at -Ok $rsOk -Code $(if ($rsOk) { "complete" } else { "failed" }) -Reasons $rsReasons -Platforms $Platforms -Errors @($fail)
-  } catch { Say ("run summary failed: " + $_.Exception.Message) }
-}Say "=== run_all 全部完成 ==="
+Finish-Summary -Code "complete" -Ok $true -Reason "正常完成"
+Say "=== run_all 全部完成 ==="

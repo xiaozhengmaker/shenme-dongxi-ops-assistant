@@ -4,6 +4,7 @@
 
 function Get-PipelineStatusPath {
   param([string]$BaseDir)
+  if ($env:GOPS_STATE_ROOT) { return (Join-Path $env:GOPS_STATE_ROOT "pipeline_status.json") }
   if ($env:GOPS_PIPELINE_STATUS_FILE) { return [string]$env:GOPS_PIPELINE_STATUS_FILE }
   $root = if ($BaseDir) { $BaseDir } else { Split-Path -Parent $PSScriptRoot }
   return (Join-Path $root "data\pipeline_status.json")

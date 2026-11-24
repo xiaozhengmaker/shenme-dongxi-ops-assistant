@@ -1,4 +1,4 @@
-// background.js —— 调度循环：向本地 hub 取任务 → 在页面里执行 → 回传结果
+﻿// background.js —— 调度循环：向本地 hub 取任务 → 在页面里执行 → 回传结果
 const HUB = "http://127.0.0.1:8787";
 let timer = null;
 let busy = false;
@@ -481,7 +481,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === "start") {
     (async () => {
       try {
-        const r = await hubControl("start", { source: "ui" });
+        const r = await hubControl("start", { source: "ui", platforms: msg.platforms || null, order: msg.order || null });
         if (!r.ok) { sendResponse({ ok: false, error: r.error, detail: r.detail }); return; }
         await setState({ running: true, stats: { joined: 0, failed: 0, skipped: 0 } });
         ensureAlarm();
@@ -703,231 +703,99 @@ function pageFBFilter() {
 }
 
 // 只对「已确认是目标群」的页面主区域操作；目标不明/无目标按钮/已待审批 => 零点击
-function pageFBJoinDirect(arg) {
-  const done = (v, e) => { window.__dshRes = JSON.stringify({ ok: v !== "err", v, e: e || "" }); };
-  const norm = s => String(s || "").replace(/\s+/g, " ").trim();
-  const want = norm(arg && arg.id);
-  const title = norm(arg && arg.title).toLowerCase();
-  const label = b => norm(b.innerText);
-  const clickables = root => [...root.querySelectorAll('a, div[role="button"], span[role="button"]')];
-  const mainEl = () => document.querySelector('[role="main"]');
-  // 精确取 /groups/<segment>；/groups/1234 不能匹配目标 123
-  const segOf = href => {
-    const s = String(href || "");
-    const p = s.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "").split(/[?#]/)[0];
-    const m = p.match(/^\/groups\/([^/]+)(?:\/|$)/);
-    if (!m) return "";
-    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
-  };
-  const pendingRe = /(已申请|取消申请|取消请求|Requested|Pending|Request sent|Cancel request)/i;
-  const joinedRe = /(已加入|Joined)/i;
-  const joinRe = /^(加入小组|加入|Join group|Join)$/i;
-  const requestJoinRe = /^(Request to join|申请加入|请求加入)$/i;
-  const visitRe = /^(访问|Visit)$/i;
-  const recRe = /(推荐小组|推荐|Suggested for you|Suggested|People you may)/i;
-  const segsIn = root => [...root.querySelectorAll('a[href*="/groups/"]')]
-    .map(a => segOf(a.getAttribute("href") || "")).filter(Boolean);
-  // 可核验的目标群头部：标题匹配 + 同一头部范围内出现目标动作行；
-  // 成员数所在浅层容器不够，必须向上找到包含动作行的共同祖先；推荐/异群祖先一律排除。
-  const inForeignLink = b => {
-    let el = b;
-    for (let i = 0; i < 4 && el; i++) {
-      const href = el.getAttribute && el.getAttribute("href");
-      if (href) { const s = segOf(href); if (s && s !== want) return true; }
-      el = el.parentElement;
-    }
-    return false;
-  };
-  const inRec = b => {
-    let el = b;
-    for (let i = 0; i < 10 && el; i++) {
-      if (el.getAttribute && el.getAttribute("role") === "main") break;
-      const tx = norm(el.innerText);
-      if (recRe.test(tx) || isArticle(el)) return true;
-      el = el.parentElement;
-    }
-    return false;
-  };
-  const safeActs = root => clickables(root).filter(b => !inForeignLink(b) && !inRec(b));
-  const actionIn = root => {
-    const tx = norm(root.innerText);
-    if (pendingRe.test(tx) || joinedRe.test(tx) || /Request to join|申请加入/i.test(tx)) return true;
-    return safeActs(root).some(b => joinRe.test(label(b)) || visitRe.test(label(b)) || requestJoinRe.test(label(b)) || pendingRe.test(label(b)) || joinedRe.test(label(b)));
-  };
-  const targetActions = root => safeActs(root).filter(b => {
-    const t = label(b);
-    return joinRe.test(t) || visitRe.test(t) || requestJoinRe.test(t);
-  });
-  const isNumSeg = s => /^\d+$/.test(String(s || ""));
-  // 标题+成员数块（tb）是目标身份证据；块内允许出现异群链接，但 numeric alias
-  // 必须唯一。URL 若为 numeric，只有这里能证明它属于同一个目标。
-  const titleInfo = m => {
-    if (!title) return null;
-    const hs = [...m.querySelectorAll('h1, h2, h3, [role="heading"]')];
-    for (const h of hs) {
-      const ht = norm(h.innerText).toLowerCase();
-      if (!ht) continue;
-      if (ht !== title && ht.indexOf(title) === -1) continue;
-      let el = h, tb = null;
-      for (let i = 0; i < 6 && el && el !== m; i++) {
-        const tx = norm(el.innerText);
-        if (tx.length > 1500 || recRe.test(tx) || isArticle(el)) break;
-        if (/(位成员|members)/i.test(tx)) { tb = el; break; }
-        el = el.parentElement;
-      }
-      if (!tb) {
-        // 简化页面可能没有成员数：只接受 h1 的直接父容器，且动作就在其中。
-        const hp = h.parentElement;
-        if (hp && hp !== m && !recRe.test(norm(hp.innerText)) && !isArticle(hp) && actionIn(hp)) {
-          const segs = [...new Set(segsIn(hp))];
-          const nums = segs.filter(isNumSeg);
-          const al = nums.length === 1 ? nums[0] : "";
-          const foreign = segs.some(s => s !== want && s !== al);
-          if (!foreign) return { h, tb: hp, alias: al, foreign: false, simple: true };
-        }
-        continue;
-      }
-      const segs = [...new Set(segsIn(tb))];
-      const nums = segs.filter(isNumSeg);
-      const al = nums.length === 1 ? nums[0] : "";
-      return { h, tb, alias: al, foreign: segs.some(s => s !== want && s !== al), simple: false };
-    }
-    return null;
-  };
-  // 从 title 块向上最多 8 层，取“最小且唯一动作”的头部祖先。
-  // 异群/推荐/帖子动作都过滤；有两个候选动作即视为不确定，零点击。
-  // pending 只在“强 pending 文案”或“title 块无异群链接时的取消按钮”上成立，
-  // 避免把只有取消请求、但标题块混入异群链接的页面误判为目标待审批。
-  const pendingStrongRe = /(已申请|取消申请|请求已发送|Request sent|Requested|Pending)/i;
-  const headerInfo = (m, ti) => {
-    if (!ti) return null;
-    let el = ti.tb, visited = null;
-    for (let i = 0; i < 8 && el && el !== m; i++) {
-      const tx = norm(el.innerText);
-      if (tx.length > 2000 || recRe.test(tx) || isArticle(el)) break;
-      const hasCancel = safeActs(el).some(b => cancelRe.test(label(b)));
-      if (pendingStrongRe.test(tx) || (hasCancel && !ti.foreign)) return { hc: el, kind: "pending", alias: ti.alias };
-      if (joinedRe.test(tx)) return { hc: el, kind: "joined", alias: ti.alias };
-      const acts = targetActions(el);
-      if (acts.length > 1) {
-        if (acts.every(b => requestJoinRe.test(label(b)))) return { hc: el, kind: "approval", alias: ti.alias };
-        return null;
-      }
-      if (acts.length === 1) {
-        const b = acts[0], lb = label(b);
-        if (joinRe.test(lb)) return { hc: el, join: b, alias: ti.alias };
-        if (requestJoinRe.test(lb)) return { hc: el, kind: "approval", alias: ti.alias };
-        if (visitRe.test(lb) && !visited) visited = { hc: el, kind: "visited", alias: ti.alias };
-      }
-      el = el.parentElement;
-    }
-    if (!ti.foreign) return { hc: ti.tb, alias: ti.alias };
-    return visited;
-  };
-  // 只读的 target-pending 识别：真实页面把「你的加入请求待审核」放在头部横幅，
-  // 取消请求在标题行之外的兄弟行；标题+成员数块还可能含异群链接。
-  // 必须同时满足：唯一匹配标题的 h1 + 目标头部范围内的待审横幅 + 对应取消按钮。
-  // 只在目标 header 祖先容器内确认，推荐卡/帖子容器一律拒绝；绝不点击任何按钮。
-  const bannerRe = /(你的加入请求待审核|加入请求待审核|Your join request is pending|Join request pending)/i;
-  const cancelRe = /^(取消请求|Cancel request|取消申请)$/i;
-  const isArticle = el => {
+function pageFBJoinDirect(p) {
+  const want = String((p && (p.id || p.gid || p.group)) || "").trim();
+  const title = String((p && p.title) || "").trim();
+  const res = { ok: true, v: "unknown", e: "" };
+  const setRes = (v, e) => { res.v = v; res.e = e || ""; try { window.__dshRes = JSON.stringify(res); } catch (x) { } };
+  const norm = (s) => String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+  const attr = (el, n) => { try { if (el && typeof el.getAttribute === "function") { const v = el.getAttribute(n); if (v != null) return v; } } catch (x) { } try { return (el && el.attrs && el.attrs[n]) || ""; } catch (x) { return ""; } };
+  const txt = (el) => norm(el && (el.innerText != null ? el.innerText : el.textContent));
+  const JOIN = /^(加入小组|加入群组|加入|join group|join)$/i;
+  const REQ = /^(请求加入|申请加入|request to join|ask to join)$/i;
+  const CANCEL = /^(取消请求|取消加入申请|cancel request|cancel join request)$/i;
+  const JOINED = /^(已加入|已加入小组|joined|joined group)$/i;
+  const PEND = /(加入请求待审核|请求待审核|请求已发送|已提交申请|等待管理员审核|request sent|request pending|join request pending|membership pending)/i;
+  const MEMBER = /(已加入|你已加入|加入成功|you're a member|you are a member|you joined|joined this group)/i;
+  const REC = /(推荐小组|推荐群组|related groups|suggested groups|groups for you|people also)/i;
+  const segOf = (u) => { const m = String(u || "").match(/\/groups\/([^\/?#]+)/i); return m ? decodeURIComponent(m[1]) : ""; };
+  const segsIn = (root) => {
+    const out = [];
     try {
-      if (el.getAttribute && el.getAttribute("role") === "article") return true;
-      return el.querySelectorAll && el.querySelectorAll('[role="article"]').length > 0;
-    } catch (e) { return true; }
+      const as = root.querySelectorAll ? root.querySelectorAll("a[href]") : [];
+      for (let i = 0; i < as.length; i++) { const s = segOf(attr(as[i], "href")); if (s) out.push(s); }
+    } catch (x) { }
+    return out;
   };
-  const pendingCtx = m => {
-    if (!title) return null;
-    const hs = [...m.querySelectorAll('h1')].filter(h => {
-      const ht = norm(h.innerText).toLowerCase();
-      return ht && (ht === title || ht.indexOf(title) !== -1);
-    });
-    if (hs.length !== 1) return null;
-    const h = hs[0];
-    const cands = [...m.querySelectorAll('div,span')].filter(el => bannerRe.test(el.innerText || ""));
-    for (const b of cands) {
-      let el = b.parentElement;
-      for (let i = 0; i < 10 && el && el !== m; i++) {
-        const tx = norm(el.innerText);
-        if (tx.length > 1200) break;
-        if (recRe.test(tx)) break;
-        if (isArticle(el)) break;
-        const hasHeading = [...el.querySelectorAll('h1')].indexOf(h) !== -1;
-        const hasCancel = clickables(el).some(x => cancelRe.test(label(x)));
-        if (hasHeading && hasCancel) return el;
-        el = el.parentElement;
-      }
-    }
-    return null;
+  const inArticle = (el) => { let x = el; for (let i = 0; i < 14 && x; i++) { if (String(attr(x, "role")).toLowerCase() === "article") return true; x = x.parentElement; } return false; };
+  const clickers = (root) => {
+    const sel = 'div[role="button"],a[role="button"],span[role="button"],button';
+    const out = [];
+    try { const ns = root.querySelectorAll ? root.querySelectorAll(sel) : []; for (let i = 0; i < ns.length; i++) out.push(ns[i]); } catch (x) { }
+    return out;
   };
-  let tries = 0;
-  const step = () => {
-    if (!want) { done("not_found", "target_unknown"); return; }
-    const m = mainEl();
-    if (!m) {
-      tries++;
-      if (tries > 8) { done("not_found", "target_main_missing"); return; }
-      setTimeout(step, 1000); return;
-    }
-    const ti = titleInfo(m);
-    const cur = segOf(location.href);
-    if (cur !== want) {
-      const aliasOk = isNumSeg(cur) && ti && ti.alias && cur === ti.alias;
-      if (!aliasOk) {
-        tries++;
-        if (tries > 8) { done("not_found", "target_url_mismatch"); return; }
-        setTimeout(step, 1000); return;
+
+  function step(tries) {
+    const main = document.querySelector ? document.querySelector('div[role="main"]') : null;
+    if (!main) { if (tries < 5) { setTimeout(() => step(tries + 1), 700); return; } setRes("not_found", "no_main"); return; }
+    const heads = [];
+    try {
+      const hs = main.querySelectorAll('h1,h2,h3,[role="heading"]');
+      const want2 = title.toLowerCase();
+      for (let i = 0; i < hs.length; i++) {
+        const t = txt(hs[i]).toLowerCase();
+        if (t && (t === want2 || t.indexOf(want2) !== -1)) heads.push(hs[i]);
       }
+    } catch (x) { }
+    if (heads.length === 0) { if (tries < 5) { setTimeout(() => step(tries + 1), 700); return; } setRes("not_found", "no_target_header"); return; }
+    if (heads.length > 1) { setRes("not_found", "ambiguous_title"); return; }
+
+    const mainText = txt(main);
+    const acts = clickers(main).filter((b) => !inArticle(b));
+    const joins = acts.filter((b) => JOIN.test(txt(b)));
+    const reqs = acts.filter((b) => REQ.test(txt(b)));
+    const cancels = acts.filter((b) => CANCEL.test(txt(b)));
+    const joinedBtns = acts.filter((b) => JOINED.test(txt(b)));
+
+    if (cancels.length > 0 && joins.length === 0) { setRes("request_sent", "cancel_button_present"); return; }
+    if (PEND.test(mainText) && joins.length === 0) { setRes("request_sent", "pending_banner"); return; }
+    if (joinedBtns.length > 0 && joins.length === 0 && reqs.length === 0) { setRes("already", "joined_button"); return; }
+    if (MEMBER.test(mainText) && joins.length === 0 && reqs.length === 0) { setRes("already", "member_text"); return; }
+    if (joins.length === 0 && reqs.length === 0) {
+      if (REC.test(mainText)) { setRes("not_found", "only_recommended_actions"); return; }
+      if (tries < 5) { setTimeout(() => step(tries + 1), 700); return; }
+      setRes("not_found", "no_join_action");
+      return;
     }
-    const pc = pendingCtx(m);
-    if (pc) { done("request_sent", "pending_no_click"); return; }
-    const hi = headerInfo(m, ti);
-    if (!hi) {
-      tries++;
-      if (tries > 6) { done("not_found", cur !== want ? "target_url_mismatch" : "no_target_header"); return; }
-      setTimeout(step, 900); return;
+    if (joins.length > 1) { setRes("not_found", "ambiguous_join_buttons"); return; }
+    if (reqs.length > 1) { setRes("not_found", "ambiguous_request_buttons"); return; }
+
+    const segsAll = [...new Set(segsIn(main))];
+    const cur = segOf((location && location.href) || "");
+    const isNum = (s) => /^\d{6,}$/.test(String(s || ""));
+    const nums = segsAll.filter(isNum);
+    const alias = nums.length === 1 ? nums[0] : "";
+    const eq = (a, b) => a && b && String(a).toLowerCase() === String(b).toLowerCase();
+    const urlOk = eq(cur, want) || (alias && isNum(cur) && eq(cur, alias));
+    const segOk = segsAll.some((s) => eq(s, want)) || (alias && isNum(want) && eq(alias, want)) || (alias && !isNum(want)) || (alias && isNum(cur) && eq(alias, cur)) || segsAll.length === 0;
+    if (!urlOk && !segOk) { setRes("not_found", "target_id_mismatch"); return; }
+
+    const btn = joins.length === 1 ? joins[0] : reqs[0];
+    const isReq = joins.length === 0;
+    try { btn.click(); } catch (x) { setRes("unknown", "click_failed"); return; }
+
+    let n = 0;
+    function verify() {
+      const t = txt(main);
+      if (MEMBER.test(t)) { setRes("joined", "after_click_member"); return; }
+      if (PEND.test(t)) { setRes(isReq ? "request_sent" : "joined", isReq ? "after_click_pending" : "after_click_pending_text"); return; }
+      if (n < 4) { n++; setTimeout(verify, 500); return; }
+      setRes("unknown", "clicked_no_evidence");
     }
-    const hc = hi.hc;
-    const txt = norm(hc.innerText);
-    if (hi.kind === "pending") { done("request_sent", "pending_no_click"); return; }
-    if (hi.kind === "joined" || joinedRe.test(txt)) { done("already", "already_member"); return; }
-    if (hi.kind === "approval" || /Request to join|申请加入/i.test(txt)) { done("approval", "request_to_join_no_click"); return; }
-    if (/非公开|Private group/i.test(txt)) { done("approval", "private_group"); return; }
-    const join = hi.join;
-    if (!join) {
-      if (hi.kind === "visited" || safeActs(hc).some(b => visitRe.test(label(b)))) { done("visited", "member_visit_only"); return; }
-      tries++;
-      if (tries > 6) { done("not_found", "no_join_on_target_header"); return; }
-      setTimeout(step, 900); return;
-    }
-    try { join.click(); } catch (e) { done("err", "click_failed"); return; }
-    let wait = 0;
-    const verify = () => {
-      wait++;
-      const dl = [...document.querySelectorAll('div[role="dialog"]')];
-      for (const d of dl) {
-        const dt = (d.innerText || "");
-        if (/(加入小组|问题|Questions|回答|Submit|提交)/i.test(dt) && dt.length > 10) {
-          const c = [...d.querySelectorAll('div[role="button"],a')].find(b => /^(关闭|Close|取消|Cancel)$/i.test(label(b)));
-          if (c) { try { c.click(); } catch (e) {} }
-          done("approval", "question_dialog");
-          return;
-        }
-      }
-      if (pendingCtx(m)) { done("request_sent", "request_sent"); return; }
-      const ti2 = titleInfo(m), hi2 = headerInfo(m, ti2);
-      const curHi = hi2 || { hc: hc };
-      const t2 = norm(curHi.hc.innerText);
-      if (hi2 && hi2.kind === "pending") { done("request_sent", "request_sent"); return; }
-      if (hi2 && hi2.kind === "approval" || /Request to join|申请加入/i.test(t2)) { done("approval", "request_to_join_no_click"); return; }
-      if (hi2 && hi2.kind === "joined" || joinedRe.test(t2)) { done("joined", "joined_by_page"); return; }
-      if (hi2 && hi2.kind === "visited" || safeActs(curHi.hc).some(b => visitRe.test(label(b)))) { done("visited", "member_visit_only"); return; }
-      if (wait > 10) { done("unknown", "no_state_change"); return; }
-      setTimeout(verify, 900);
-    };
-    setTimeout(verify, 1400);
-  };
-  step();
+    setTimeout(verify, 500);
+  }
+
+  try { step(0); } catch (e) { setRes("unknown", "exception:" + (e && e.message ? e.message : e)); }
 }
 
 function pageFBJoin(arg) {

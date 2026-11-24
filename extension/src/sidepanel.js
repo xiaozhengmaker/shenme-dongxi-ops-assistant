@@ -1,6 +1,6 @@
-﻿
+
 // —— 扩展上下文守卫：扩展被重新加载后，已打开的页面会失去 chrome.* API ——
-function ctxAlive() { try { return !!(window.chrome && chrome.runtime && chrome.runtime.id); } catch (e) { return false; } }
+function ctxAlive() { try { var w = (typeof window !== "undefined") ? window : {}; var c = w.chrome || ((typeof chrome !== "undefined") ? chrome : ((typeof globalThis !== "undefined") ? globalThis.chrome : null)); return !!(c && c.runtime && c.runtime.id); } catch (e) { return false; } }
 let CTX_ALIVE = ctxAlive();
 function showDeadContext() {
   const box = document.getElementById("offline");
@@ -123,10 +123,12 @@ function currentPlatform() {
 
 async function requestStart() {
   if (RUN_BUSY) return;
+  const sel = selectedPlatforms();
+  if (!sel.length) { showFeedback("没有勾选平台：先勾选（0 个不允许启动）", "warn"); return; }
   setRunBusy(true);
-  showFeedback("正在请求启动…", "");
+  showFeedback("正在请求启动…（" + sel.join(" → ") + "）", "");
   let r = null;
-  try { r = await sendWithTimeout("start", START_TIMEOUT_MS); } catch (e) { r = { ok: false, error: "disconnected" }; }
+  try { r = await sendWithTimeout("start", START_TIMEOUT_MS, { platforms: sel, order: sel }); } catch (e) { r = { ok: false, error: "disconnected" }; }
   if (!r || !r.ok) {
     if (r && r.error === "timeout_pending") {
       showFeedback("启动请求超时，结果待确认（未自动重发）", "warn");
@@ -136,8 +138,8 @@ async function requestStart() {
   } else {
     showFeedback("已请求启动，后台开始执行", "ok");
   }
-  setRunBusy(false);
-  try { await refresh(); } catch (e) {}
+  try { await refresh(); } catch (e) {} finally { setRunBusy(false); }
+  return r;
 }
 
 async function requestStop() {
@@ -156,8 +158,8 @@ async function requestStop() {
     // 只结束本轮；不写全局急停。外部 worker 可能仍在完成已发出的动作。
     showFeedback("已请求停止本轮，等待 worker 确认", "ok");
   }
-  setRunBusy(false);
-  try { await refresh(); } catch (e) {}
+  try { await refresh(); } catch (e) {} finally { setRunBusy(false); }
+  return r;
 }
 
 async function requestSkip() {
@@ -174,8 +176,8 @@ async function requestSkip() {
   } else {
     showFeedback("已请求跳过 " + platform + "，确认退出后继续下一平台", "ok");
   }
-  setRunBusy(false);
-  try { await refresh(); } catch (e) {}
+  try { await refresh(); } catch (e) {} finally { setRunBusy(false); }
+  return r;
 }
 
 async function requestEmergencyStop() {
@@ -197,8 +199,8 @@ async function requestClearStop() {
   try { r = await sendWithTimeout("clear_stop", STOP_TIMEOUT_MS, {}); } catch (e) { r = { ok: false, error: "disconnected" }; }
   if (!r || !r.ok) showFeedback("解除急停失败：" + friendlyError(r), "bad");
   else showFeedback("已解除急停并保留备份", "ok");
-  setRunBusy(false);
-  try { await refresh(); } catch (e) {}
+  try { await refresh(); } catch (e) {} finally { setRunBusy(false); }
+  return r;
 }
 
 async function loadSummary() {
@@ -406,7 +408,10 @@ async function send(type) {
   if (!ctxAlive()) return null;
   for (let i = 0; i < 3; i++) {
     try {
-      const r = await chrome.runtime.sendMessage({ type });
+      const r = await Promise.race([
+        chrome.runtime.sendMessage({ type }),
+        new Promise(function (_, rej) { setTimeout(function () { rej(new Error("send_timeout")); }, 4000); })
+      ]);
       if (r) return r;
     } catch (e) {}
     await new Promise(res => setTimeout(res, 400));
@@ -415,10 +420,23 @@ async function send(type) {
 }
 
 async function refresh() {
+  if (!window.__spLoaded) { const _p = document.getElementById("phase"); if (_p) { _p.textContent = "载入中…"; } }
   let r = null;
   try { r = await send("status"); } catch (e) { r = null; }
-  if (!r || !r.ok) { $("#hubText").textContent = "扩展未响应"; return; }
+  if (!r || !r.ok) {
+    $("#hubText").textContent = "扩展未响应";
+    $("#phase").textContent = "—";
+    window.__spLoaded = true;
+    $("#dot").className = "dot off";
+    const _lh2 = document.getElementById("lHub");
+    if (_lh2) { _lh2.className = "dot off"; _lh2.title = "扩展未响应"; }
+    ["btnStart", "btnStop", "btnSkip", "btnEmergency", "btnRecover"].forEach(function (id) {
+      const el = document.getElementById(id); if (el) { el.disabled = true; }
+    });
+    return;
+  }
   const hub = r.hub || {}, st = r.st || {};
+  window.__spLoaded = true;
   const alive = !!hub.ok;
   const off = document.getElementById("offline");
   if (off) off.classList.toggle("hidden", alive);
@@ -536,14 +554,31 @@ const PLAT_ICO = { Facebook: "fb", Telegram: "tg", Discord: "dc", Reddit: "rd", 
   };
   function logoOf(p) { return LOGO_SVG[p] || ""; }
 
-function syncPlatHint() {
-  const hint = document.getElementById("platsHint");
-  if (!hint) return;
+function selectedPlatforms() {
   const on = [];
   document.querySelectorAll('#platList input[type=checkbox]').forEach(function (b) {
-    if (b.checked) { const row = b.closest('.plat'); const nm = row ? (row.getAttribute('data-name') || '') : ''; if (nm) on.push(nm); }
+    if (!b.checked) return;
+    const row = b.closest('.plat');
+    const nm = row ? (row.getAttribute('data-name') || '') : '';
+    if (nm) on.push(nm);
   });
-  hint.textContent = on.length ? ("已选 " + on.length + " 个") : "";
+  return on;
+}
+
+function syncPlatHint() {
+  const hint = document.getElementById("platsHint");
+  const on = selectedPlatforms();
+  if (hint) {
+    hint.textContent = on.length
+      ? ("已选 " + on.length + " 个 · 将按序运行：" + on.join(" → "))
+      : "未选平台（开始运行已禁用）";
+  }
+  const bs = document.getElementById("btnStart");
+  if (bs) {
+    bs.disabled = (on.length === 0);
+    bs.title = on.length ? ("按序运行：" + on.join(" → ")) : "先在下方勾选平台，0 个不允许启动";
+  }
+  return on;
 }
 
 function renderPlats(c) {
@@ -744,6 +779,10 @@ async function refreshLive() {
     document.getElementById("liveState").textContent = "后台离线";
     document.getElementById("liveCurrent").textContent = "—";
     document.getElementById("liveEvents").innerHTML = "";
+    document.getElementById("livePlat").textContent = "—";
+    ["kJoined", "kSkipped", "kFailed"].forEach(function (id) {
+      const e2 = document.getElementById(id); if (e2) { e2.textContent = "0"; }
+    });
     return;
   }
   const st = document.getElementById("liveState");
@@ -833,7 +872,7 @@ async function loadLastRun() {
     const lr = d && d.lastRun;
     const box = document.getElementById("lastrunbox");
     if (!box) { return; }
-    if (!lr) { box.style.display = "none"; return; }
+    if (!lr || !lr.run_id) { box.style.display = "none"; return; }
     box.style.display = "block";
     const ok = lr.ok === true;
     const pill = document.getElementById("lrOk");
@@ -843,7 +882,8 @@ async function loadLastRun() {
     const ended = String(lr.ended_at || "").replace("T", " ").slice(11, 16);
     document.getElementById("lrMeta2").textContent =
       started + " → " + ended + (lr.duration_min == null ? "" : (" · " + lr.duration_min + " 分钟"));
-    document.getElementById("lrReason2").textContent = lr.reason || "—";
+    const lrText = lr.report_text || (Array.isArray(lr.report) ? lr.report.join("\n") : "") || lr.reason || "—";
+    document.getElementById("lrReason2").textContent = lrText;
   } catch (e) { }
 }
 loadLastRun();

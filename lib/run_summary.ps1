@@ -3,6 +3,7 @@
 
 function Get-RunSummaryPath {
     param([string]$BaseDir)
+  if ($env:GOPS_STATE_ROOT) { return (Join-Path $env:GOPS_STATE_ROOT "run_summary.json") }
     if (-not $BaseDir) { $BaseDir = Split-Path -Parent $PSScriptRoot }
     return (Join-Path $BaseDir "data\run_summary.json")
 }
@@ -69,7 +70,8 @@ function Write-RunSummary {
         [string[]]$Reasons = @(),
         [string[]]$Platforms = @(),
         [string[]]$Errors = @(),
-        [hashtable]$Extra = @{}
+        [hashtable]$Extra = @{},
+        [switch]$Force
     )
     if (-not $BaseDir) { $BaseDir = Split-Path -Parent $PSScriptRoot }
     $path = Get-RunSummaryPath -BaseDir $BaseDir
@@ -84,6 +86,16 @@ function Write-RunSummary {
     try { if ($StartedAt) { $startedDt = [datetime]$StartedAt } } catch { }
     $mins = $null
     if ($startedDt) { $mins = [int][math]::Round(($now - $startedDt).TotalMinutes, 0) }
+
+    # 旧轮不得覆盖新轮：现有摘要的开始时间晚于本次，则跳过（除非 -Force）
+    if (-not $Force -and $prev -and $startedDt) {
+        $prevStart = $null
+        try { if ($prev.started_at) { $prevStart = [datetime]$prev.started_at } } catch { }
+        if ($prevStart -and $prevStart -gt $startedDt) {
+            Write-Host ("[run_summary] skip stale write: prev=" + $prevStart.ToString("s") + " > this=" + $startedDt.ToString("s"))
+            return $path
+        }
+    }
 
     $usersRows = Get-CountLines -Path (Join-Path $BaseDir "data\users.csv")
     $steamRows = Get-CountLines -Path (Join-Path $BaseDir "data\steam_users.csv")

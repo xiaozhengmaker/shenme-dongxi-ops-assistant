@@ -4,6 +4,7 @@ $script:RunControlDefault = $null
 
 function Get-RunControlPath([string]$BaseDir) {
   if ($env:GOPS_RUN_CONTROL_FILE) { return $env:GOPS_RUN_CONTROL_FILE }
+  if ($env:GOPS_STATE_ROOT) { return (Join-Path $env:GOPS_STATE_ROOT "run_control.json") }
   if (-not $BaseDir) { $BaseDir = (Split-Path -Parent $PSScriptRoot) }
   return (Join-Path $BaseDir "data\run_control.json")
 }

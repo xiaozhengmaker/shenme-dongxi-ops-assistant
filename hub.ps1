@@ -449,9 +449,11 @@ try {
 . (Join-Path $here "lib\member_sample.ps1")
 
 . (Join-Path $here "lib\run_summary.ps1")
+
+. (Join-Path $here "lib\run_plan.ps1"); . (Join-Path $PSScriptRoot "lib\run_plan_gate.ps1")
 . (Join-Path $here "lib\kw_stats.ps1")
 . (Join-Path $here "lib\neg_cache.ps1")
-
+. (Join-Path $PSScriptRoot "lib\round_report.ps1"); . (Join-Path $PSScriptRoot "lib\hub_dispatch.ps1")
 
 
 
@@ -1178,7 +1180,12 @@ $state = @{
 
 
 
-  joinDispatched = 0
+  plan = @()
+  planIndex = 0
+  planRunId = ""
+  ledger = @{}
+  skipApplied = @{}
+  joinDispatched = 0; platformStats = @{}; reportText = ""; lateReceipts = @(); joinInflight = $null; dispatches = @{}; stopRequested = $false; stopMode = ""; externalRun = $false; unconfirmed = 0
 
 
 
@@ -1542,7 +1549,7 @@ function Write-HubRunSummary {
 
 
 
-  param([bool]$Ok, [string]$Code, [string]$Reason)
+  param([bool]$Ok, [string]$Code, [string]$Reason, [string]$StopReason = "")
 
 
 
@@ -1550,19 +1557,19 @@ function Write-HubRunSummary {
 
 
 
-    $rid = "hub-" + ([string]$state.started)
+        if ($state.planRunId) { $rid = [string]$state.planRunId } else { $rid = "hub-" + ([string]$state.started) }
 
 
 
-    $null = Write-RunSummary -BaseDir $here -RunId $rid -StartedAt $state.started -Ok $Ok -Code $Code -Reason $Reason -Platforms @($Platform) -Extra @{
+$rep = Get-HubRoundReport -State $state -Code $Code -StopReason $StopReason; if ($rep.text) { $state.reportText = [string]$rep.text }; $null = Write-RunSummary -BaseDir $here -RunId $rid -StartedAt $state.started -Ok $Ok -Code $Code -Reason $(if ($Reason) { $Reason } else { $rep.summary }) -Platforms @($rep.plan) -Reasons @($rep.lines) -Extra @{
 
 
 
-      joined = [int]$state.joined; existing = [int]$state.existing; skipped = [int]$state.skipped
+report = @($rep.lines); report_text = [string]$rep.text; platform_results = $rep.results; late_receipts = @($state.lateReceipts).Count; joined = [int]$state.joined; existing = [int]$state.existing; skipped = [int]$state.skipped
 
 
 
-      failed = [int]$state.failed; candidates = [int]$state.candidates.Count; queue = [int]$state.queue.Count
+failed = [int]$state.failed; unconfirmed = [int]$state.unconfirmed; candidates = [int]$state.candidates.Count; queue = [int]$state.queue.Count
 
 
 
@@ -26952,7 +26959,7 @@ while ($listener.IsListening) {
 
 
 
-                            queriesLeft = $state.queries.Count; candidates = $state.candidates.Count }
+queriesLeft = $state.queries.Count; candidates = $state.candidates.Count; run_id = [string]$state.planRunId; plan = @($state.plan); ledger = @($state.ledger.Keys | ForEach-Object { $state.ledger[$_] } | Select-Object key, platform, dispatched, outcome, reason); platformStats = $state.platformStats; report_text = [string]$state.reportText; late_receipts = @($state.lateReceipts).Count }
 
 
 
@@ -44744,7 +44751,27 @@ while ($listener.IsListening) {
 
 
 
-    if ($path -eq "/api/lastrun" -and $req.HttpMethod -eq "GET") {
+    # --- build identity: lets the sidebar/ops cross-check what is actually running ---
+if ($path -eq "/api/version" -and $req.HttpMethod -eq "GET") {
+  $hubPath = Join-Path $here "hub.ps1"
+  $bgPath = Join-Path $here "extension\src\background.js"
+  $spPath = Join-Path $here "extension\src\sidepanel.js"
+  $fp = { param($p) if (Test-Path $p) { (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.Substring(0, 16) } else { "" } }
+  $repoHead = ""
+  try { $repoHead = (& git -C "D:\DeepSeek\shenmedongxi" rev-parse --short HEAD 2>$null) } catch { }
+  Send-Json $ctx 200 @{
+    ok = $true
+    buildId = "hub-" + (& $fp $hubPath)
+    hubSha16 = (& $fp $hubPath)
+    backgroundSha16 = (& $fp $bgPath)
+    sidepanelSha16 = (& $fp $spPath)
+    repoHead = [string]$repoHead
+    startedAt = [string]$state.started
+    pid = $PID
+    at = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK")
+  }
+  continue
+}if ($path -eq "/api/lastrun" -and $req.HttpMethod -eq "GET") {
 
 
 
@@ -48897,6 +48924,46 @@ while ($listener.IsListening) {
 
 
       if ($body.action -eq "start") {
+        # ---- 运行已选平台：冻结显式顺序计划（m14850 第 1 项）----
+        $planSel = @()
+        try {
+          if ($body.order) { $planSel = @($body.order) } elseif ($body.platforms) { $planSel = @($body.platforms) }
+        } catch { $planSel = @() }
+        $hasPlatKey = $false
+        try { $hasPlatKey = (@($body.PSObject.Properties.Name) -contains "platforms") } catch { }
+        if ($hasPlatKey -and @($planSel).Count -eq 0) {
+          Send-Json $ctx 400 @{ ok = $false; error = "no_platforms"; detail = "0 个平台不允许启动" }
+          continue
+        }
+        if (@($planSel).Count -gt 0) {
+          $knownPlats = @()
+          try { $knownPlats = @($cfg.platforms | ForEach-Object { [string]$_ }) } catch { }
+          if (@($knownPlats).Count -eq 0) { try { $knownPlats = @($cfg.quotas.PSObject.Properties.Name) } catch { } }
+          $thePlan = New-RunPlan -Platforms $planSel -Known $knownPlats
+          if (@($thePlan.order).Count -eq 0) {
+            Send-Json $ctx 400 @{ ok = $false; error = "no_platforms"; detail = "所选平台不在可用平台列表内" }
+            continue
+          }
+                                $planNew = @($thePlan.order)
+                                $planRunIdNew = "hub-" + (Get-Date).ToString("yyyyMMdd-HHmmss")
+                                try {
+                                    $rc = Register-RunControl -BaseDir $here -RunId $planRunIdNew -Platforms $planNew -Current ([string]$planNew[0])
+                                    if (-not $rc.ok) { Send-Json $ctx 409 @{ ok = $false; error = "run_active"; run_id = $rc.run_id }; continue }
+                                } catch {
+                                    Add-Event ("[hub] run_control 注册失败：" + $_.Exception.Message)
+                                    Send-Json $ctx 500 @{ ok = $false; error = "run_register_failed"; detail = $_.Exception.Message }
+                                    continue
+                                }
+$null = Initialize-HubRound -State $state -RunId $planRunIdNew -Platforms $planNew -External $false
+                                $state.planIndex = 0
+                                $state.planRunId = $planRunIdNew
+                                $state.skipApplied = @{}
+                                $state.ledger = @{}
+                                $state.platformAbort = $false
+$state.platformStats = @{}; foreach ($pp in @($planNew)) { $state.platformStats[[string]$pp] = New-PlatformResult -Platform ([string]$pp) -Result "未运行" }
+          $script:Platform = [string]$thePlan.order[0]
+          Add-Event ("[hub] 本轮计划 " + $state.planRunId + "：" + ($state.plan -join " > "))
+        }
 
 
 
@@ -49710,8 +49777,8 @@ while ($listener.IsListening) {
 
 
 
-
-
+if ($body.platform) { $rqId = [string]$body.run_id; if (-not $rqId) { $rqId = "hub-" + (Get-Date).ToString("yyyyMMdd-HHmmss") }; $null = Initialize-HubRound -State $state -RunId $rqId -Platforms @($want) -External ([bool]$body.run_id) }
+if ($body.platform -and -not $body.run_id) { try { $null = Register-RunControl -BaseDir $here -RunId $rqId -Platforms @($want) -Current $want } catch { } }
         Write-Host (Start-Run)
 
 
@@ -50904,7 +50971,7 @@ while ($listener.IsListening) {
 
 
 
-          $state.running = $false
+$state.stopRequested = $true; $state.stopMode = "stop"; $state.phase = "join"; if ($state.queue) { $state.queue.Clear() }; $state.candidates = @(); $state.pending = $null; $state.joinInflight = $null
 
 
 
@@ -50912,7 +50979,7 @@ while ($listener.IsListening) {
 
 
 
-          $state.phase = "idle"
+if (-not $state.running) { $state.phase = "idle" }
 
 
 
@@ -50944,7 +51011,7 @@ while ($listener.IsListening) {
 
 
 
-        $state.running = $false
+$state.stopRequested = $true; $state.stopMode = "stop"; $state.phase = "join"; if ($state.queue) { $state.queue.Clear() }; $state.candidates = @(); $state.pending = $null; $state.joinInflight = $null
 
 
 
@@ -50952,7 +51019,7 @@ while ($listener.IsListening) {
 
 
 
-        $state.phase = "idle"
+if (-not $state.running) { $state.phase = "idle" }
 
 
 
@@ -51176,7 +51243,7 @@ while ($listener.IsListening) {
 
 
 
-          $state.running = $false
+$state.platformAbort = $true; $state.abortReason = ("人工跳过 " + $wantPlat); $state.phase = "join"; if ($state.queue) { $state.queue.Clear() }; $state.candidates = @(); $state.pending = $null; $state.joinInflight = $null
 
 
 
@@ -51184,7 +51251,7 @@ while ($listener.IsListening) {
 
 
 
-          $state.phase = "idle"
+if (-not $state.running) { $state.phase = "idle" }
 
 
 
@@ -51248,7 +51315,7 @@ while ($listener.IsListening) {
 
 
 
-        $state.running = $false
+$state.platformAbort = $true; $state.abortReason = ("人工跳过 " + $wantPlat); $state.phase = "join"; if ($state.queue) { $state.queue.Clear() }; $state.candidates = @(); $state.pending = $null; $state.joinInflight = $null
 
 
 
@@ -51256,7 +51323,7 @@ while ($listener.IsListening) {
 
 
 
-        $state.phase = "idle"
+if (-not $state.running) { $state.phase = "idle" }
 
 
 
@@ -51392,7 +51459,7 @@ while ($listener.IsListening) {
 
 
 
-        $state.running = $false
+$state.stopRequested = $true; $state.stopMode = "emergency"; $state.phase = "join"; if ($state.queue) { $state.queue.Clear() }; $state.candidates = @(); $state.pending = $null; $state.joinInflight = $null
 
 
 
@@ -51400,7 +51467,7 @@ while ($listener.IsListening) {
 
 
 
-        $state.phase = "idle"
+if (-not $state.running) { $state.phase = "idle" }
 
 
 
@@ -51617,7 +51684,7 @@ while ($listener.IsListening) {
 
 
       if (-not $state.running) { Send-Json $ctx 204 $null; continue }
-
+if ($state.joinInflight -and -not (Test-HubDispatchExpired -Dispatch $state.joinInflight)) { Send-Json $ctx 204 $null; continue }
 
 
 
@@ -53000,7 +53067,7 @@ while ($listener.IsListening) {
 
 
 
-        while ($state.queue.Count -gt 0) {
+while ($state.queue.Count -gt 0 -and -not $state.stopRequested -and -not $state.platformAbort -and -not (Test-GOpsStop $here)) {
 
 
 
@@ -53096,7 +53163,7 @@ while ($listener.IsListening) {
 
 
 
-          $joinTask = $state.queue.Dequeue()
+if ($state.platformAbort) { $joinTask = $null; break } else { $joinTask = $state.queue.Dequeue() }
 
 
 
@@ -53104,7 +53171,14 @@ while ($listener.IsListening) {
 
 
 
-          if ($wl.Count -gt 0) { $state.joinDispatched++ }
+          # ---- 候选台账 + 派发计数（m14850 第 4 项）----
+                                $lk = ""
+$taskId = Next-TaskId
+$dispatch = $null
+try { if ($joinTask) { $dispatch = New-HubJoinDispatch -State $state -Item $joinTask -Platform $script:Platform -TaskId $taskId } } catch { $dispatch = $null }
+if (-not $dispatch) { Add-Event ("[dispatch] 跳过已派发或无法建身份：" + [string]$joinTask.id); continue }
+$null = $null
+          $state.joinDispatched++
 
 
 
@@ -53123,12 +53197,29 @@ while ($listener.IsListening) {
         }
 
 
-
-
-
-
-
+$planStop = (Test-GOpsStop $here); if ($planStop -and -not $state.stopMode) { $state.stopMode = "stop" }; if ($planStop) { $state.stopRequested = $true }
+$isEmerg = ([string]$state.stopMode -eq "emergency")
+$isShared = ([string]$state.stopMode -eq "global_failure")
+$isStop = ([bool]$state.stopRequested -and -not $isEmerg -and -not $isShared)
+$pc = 0
         if (-not $joinTask) {
+          # ---- 顺延规则（m14850 第 3 项）：平台完成且有后继 → 下一平台 ----
+$planStop = [bool]$state.stopRequested
+          $planIdx = [int]$state.planIndex
+          $planCount = @($state.plan).Count
+          $hasNext = ($planCount -gt ($planIdx + 1))
+$adv = Resolve-PlanAdvance -Outcome "platform_complete" -StopRequested $isStop -Emergency $isEmerg -SharedFailure $isShared -PlatformAborted ([bool]$state.platformAbort) -HasNext $hasNext -PendingTerminal (Get-LedgerPendingTerminal $state.ledger)
+          if ($adv.advance -and $hasNext) {
+$null = Complete-HubPlatform -State $state -Platform $script:Platform -Result $(if ([string]$adv.code -eq "platform_partial") { "部分完成" } elseif ($state.platformAbort) { "部分完成（已停止新派发）" } else { "完成" }) -Reason $state.abortReason -Ledger $state.ledger
+            $state.planIndex = $planIndex + 1; $script:Platform = [string]$state.plan[$state.planIndex]
+            $state.phase = "search"
+            $state.candidates = @()
+            $state.queue = New-Object System.Collections.Queue
+            $state.current = "准备开始 · 下一平台 " + $script:Platform
+$state.platformAbort = $false; $state.abortReason = ""; $state.skipApplied = @{}; try { $null = Write-PlanHeartbeat -BaseDir $here -RunId $state.planRunId -Platform $script:Platform } catch { }; Add-Event ("[hub] 顺延到下一平台：" + $script:Platform + " · " + $adv.code)
+            Send-Json $ctx 204 $null
+            continue
+          }
 
 
 
@@ -53136,11 +53227,11 @@ while ($listener.IsListening) {
 
 
 
-          $state.phase = "done"; $state.running = $false
-
-          Write-HubRunSummary -Ok $true -Code "complete" -Reason ("候选队列已空（加入 " + $state.joined + " · 已存在 " + $state.existing + " · 过滤已入库 " + $state.filtered + " · 跳过 " + $state.skipped + " · 失败 " + $state.failed + "）")
-
-
+$pc = 0; foreach ($kk in @($state.ledger.Keys)) { if ([string]$state.ledger[$kk].outcome -eq "unconfirmed") { $pc++ } }; $null = Complete-HubPlatform -State $state -Platform $script:Platform -Result $(if ($isEmerg -or $isShared -or $isStop) { "已停止" } elseif ($state.platformAbort) { "部分完成（已停止新派发）" } else { "完成" }) -Reason $state.abortReason -Ledger $state.ledger; $state.unconfirmed = [Math]::Max([int]$state.unconfirmed, $pc)
+$null = Set-LedgerNotExecuted $state.ledger; if (-not $state.externalRun -and @($state.plan).Count -gt 0) { try { Complete-RunControl -BaseDir $here -RunId $state.planRunId } catch { } }
+$finCode = [string]$adv.code; if (-not $finCode) { $finCode = $(if ($pc -gt 0) { "partial_complete" } else { "complete" }) }; $repStop = $(if ($isEmerg) { "全局急停" } elseif ($isShared) { "共享故障" } elseif ($isStop) { "人工停止" } else { [string]$state.abortReason }); $rep = Get-HubRoundReport -State $state -Code $finCode -StopReason $repStop; $state.reportText = [string]$rep.text; $state.phase = "done"; $state.running = $false; $state.platformAbort = $false
+if (-not $state.externalRun -and @($state.plan).Count -gt 0) { Write-HubRunSummary -Ok ($finCode -eq "complete") -Code $finCode -Reason $rep.summary -StopReason $repStop }
+if (-not $state.externalRun) { $state.plan = @(); $state.planIndex = 0; $state.planRunId = "" } else { $state.planIndex = $planIdx }; $state.stopRequested = $false; $state.stopMode = ""
 
 
 
@@ -53234,7 +53325,7 @@ while ($listener.IsListening) {
 
 
 
-        $id = Next-TaskId
+$id = $taskId
 
 
 
@@ -57974,6 +58065,31 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
+$dres = Resolve-HubJoinReceipt -State $state -CurrentPlatform $script:Platform -TaskId ([string]$r.id) -Value $v -Error ([string]$r.error)
+
+
+
+
+
+
+
+if (-not $dres -or [string]$dres.status -ne "applied") { Add-Event ("[receipt] 迟到/重复回执已隔离 id=" + [string]$r.id + " reason=" + [string]$dres.reason); Send-Json $ctx 200 @{ ok = $true; ignored = $true }; continue }
+
+
+
+
+
+
+
+$before = @{ joined = [int]$state.joined; existing = [int]$state.existing; local = [int]$state.local; failed = [int]$state.failed; unconfirmed = [int]$state.unconfirmed; skipped = [int]$state.skipped }; $finalOutcome = [string]$dres.outcome
+
+
+
+
+
+
+
+$tgt = $dres.item
 
 
 
@@ -57998,7 +58114,6 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
-        $tgt = $r.target
 
 
 
@@ -58006,31 +58121,7 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        if (-not $tgt -and $state.pending -and $state.pending.cand) { $tgt = $state.pending.cand }
+$null = $null
 
 
 
@@ -58195,7 +58286,7 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
-            $disp = Get-JoinRecordDisposition -Status ([string]$joinRec.status)
+$disp = Get-JoinRecordDisposition -Status ([string]$joinRec.status); $finalOutcome = Get-HubReceiptOutcome -Value $v -Disposition $disp; if ($v -eq "already") { $disp = [pscustomobject]@{ joined = 0; existing = 1; local = 0; failed = 0 }; $finalOutcome = "existing" }
 
 
 
@@ -58203,7 +58294,7 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
-            $state.joined += [int]$disp.joined
+try { if ($state.ledger) { Set-LedgerOutcome -Ledger $state.ledger -Key ([string]$dres.ledger_key) -Outcome ([string]$finalOutcome) | Out-Null } } catch { }; $state.joined += [int]$disp.joined
 
 
 
@@ -58635,7 +58726,7 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
-          $state.failed++
+if ($v -eq "unknown" -or -not $v) { try { if ($state.ledger) { Set-LedgerOutcome -Ledger $state.ledger -Key ([string]$dres.ledger_key) -Outcome "unconfirmed" | Out-Null } } catch { }; $state.unconfirmed = [int]$state.unconfirmed + 1; $state.fails = 0; $state.platformAbort = $true; $state.abortReason = "回执未确认，停止当前平台新派发"; $finalOutcome = "unconfirmed"; Add-Event ("[hub] 未确认 " + $tgt.title + "，停止当前平台并顺延") } elseif ($v -eq "shared_failure" -or $v -eq "fatal" -or $v -eq "browser_down") { $state.stopRequested = $true; $state.stopMode = "global_failure"; $state.platformAbort = $true; $state.abortReason = "共享故障：" + $v; $finalOutcome = "global_failure"; Add-Event ("[hub] 共享故障，停止整轮：" + $v) } else { $state.failed++; $state.fails++; $finalOutcome = "failed" }
 
 
 
@@ -58667,7 +58758,7 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
 
-          $state.fails++
+$null = $null
 
 
 
@@ -58700,7 +58791,7 @@ function Add-SourceLedger([string]$pf, [string]$query, $fn, [int]$costMs, [strin
 
 
         }
-
+try { if ($state.ledger -and [string]$dres.ledger_key -and [string]$finalOutcome) { Set-LedgerOutcome -Ledger $state.ledger -Key ([string]$dres.ledger_key) -Outcome ([string]$finalOutcome) | Out-Null } } catch { }; $null = Complete-HubJoinReceipt -State $state -Dispatch $dres.dispatch -Outcome $finalOutcome -Before $before
 
 
 

@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -84,9 +84,9 @@
   </section>
 
   <section class="actions">
-    <button id="btnStart" class="primary">开始运行</button>
-    <button id="btnStop" class="plain">停止运行</button>
-    <button id="btnSkip" class="plain">跳过当前平台</button>
+    <button id="btnStart" class="primary">运行已选平台</button>
+    <button id="btnStop" class="plain" title="停止整轮：本轮不再启动后续平台；已派发动作保留等待确认">停止整轮</button>
+    <button id="btnSkip" class="plain" title="跳过本平台并继续：结束当前平台并顺延到下一平台（只跳一次）">跳过本平台并继续</button>
   </section>
 
   <section class="actions ops-actions">
@@ -106,7 +106,7 @@
   <section class="lastrunbox" id="lastrunbox" style="display:none">
     <div class="ttl">上次运行 <span id="lrOk" class="live-pill">—</span></div>
     <div id="lrMeta2" class="muted" style="font-size:12px">—</div>
-    <div id="lrReason2" style="font-size:12px;margin-top:2px;line-height:1.45">—</div>
+    <div id="lrReason2" style="font-size:12px;margin-top:2px;line-height:1.45;white-space:pre-line">—</div>
   </section>
 
   <section class="logbox">

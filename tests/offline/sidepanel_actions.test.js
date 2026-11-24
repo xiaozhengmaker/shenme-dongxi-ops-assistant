@@ -48,13 +48,21 @@ function makeEl(id) {
 function loadSidepanel() {
   const els = new Map();
   function el(id) { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); }
+  const plats = ["Facebook","Telegram","Discord","Reddit","WhatsApp","Instagram","Steam"].map(function (n) { return { name: n, checked: true }; });
   const document = {
     getElementById: el,
     querySelector(sel) {
       if (sel && sel[0] === "#") return el(sel.slice(1));
       return null;
     },
-    querySelectorAll() { return []; },
+    querySelectorAll(sel) {
+      if (sel && /checkbox/.test(sel)) {
+        return plats.map(function (p) {
+          return { checked: p.checked, closest: function () { return { getAttribute: function (a) { return a === "data-name" ? p.name : null; } }; } };
+        });
+      }
+      return [];
+    },
     createElement(tag) { return makeEl(tag); },
     body: makeEl("body")
   };
@@ -147,7 +155,7 @@ function loadSidepanel() {
   startEl.click();
   await settle(3);
   check(app.counts().start === before + 1, "sidepanel: rapid duplicate start click sends only once");
-  resolveStart({ ok: true });
+  if (typeof resolveStart === 'function') resolveStart({ ok: true });
   await settle(6);
 
   // refusal

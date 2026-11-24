@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"/>
@@ -253,7 +253,7 @@
     </div>
     <div id="lastRunBar" style="display:none;margin:0 0 14px 0;padding:10px 14px;border-radius:10px;background:#F7F8FA;border:1px solid #E5E6EB;font-size:13px;line-height:1.5">
       <b id="lrTitle">上次运行</b> <span id="lrMeta" style="color:#8F959E"></span>
-      <div id="lrReason" style="margin-top:3px"></div>
+      <div id="lrReason" style="margin-top:3px;white-space:pre-line"></div>
     </div>
 
     <div class="grid">
@@ -416,7 +416,7 @@ function render(){
   const quota = enabled.reduce(function(s,k){ return s + (Number(qm[platName(k)]) || 0); }, 0);
   document.getElementById('todayProgress').textContent = t.todayGroups + ' / ' + (quota||0);
   document.getElementById('todayBar').style.width = quota ? Math.min(100, t.todayGroups/quota*100) + '%' : '0%';
-  document.getElementById('runState').textContent = (DATA.running? '运行中 · ':'') + (DATA.phase||'idle');
+  document.getElementById('runState').textContent = (DATA.running? '运行中 · ':'') + (DATA.phase||'idle');
     try {
       fetch('http://127.0.0.1:8787/api/lastrun?t=' + Date.now()).then(function (r) { return r.json(); }).then(function (d) {
         var lr = d && d.lastRun;
@@ -436,7 +436,8 @@ function render(){
         var tg = (lr.members && lr.members.telegram) || {};
         var st = (lr.members && lr.members.steam) || {};
         var extra = 'TG 已采 ' + (tg.done||0) + ' · Steam 已采 ' + (st.done||0) + (st.rate_limited ? ('（限流 ' + st.rate_limited + '）') : '');
-        document.getElementById('lrReason').textContent = '原因：' + (lr.reason || '—') + '　｜　' + extra;
+        var lrText = lr.report_text || (Array.isArray(lr.report) ? lr.report.join('\n') : '') || lr.reason || '—';
+        document.getElementById('lrReason').textContent = lrText + '　｜　' + extra;
       }).catch(function () { });
     } catch (e) { }
 try { syncRunButtons(DATA); } catch(e) {}

@@ -1,4 +1,25 @@
-﻿# run_daily.ps1 —— 计划任务入口：hub 探活 + 外部平台 worker。
+﻿# --- planned round entry (real run_daily entry; inert unless GOPS_PLANNED_ROUND=1) ---
+if ($env:GOPS_PLANNED_ROUND -eq "1") {
+  . (Join-Path $PSScriptRoot "lib\round_engine.ps1")
+  . (Join-Path $PSScriptRoot "lib\platform_runners.ps1")
+  $rr = $env:GOPS_ROUND_RUNNERS
+  if ($rr) { . $rr; $runners = New-FakeRunners } else { $runners = New-PlatformRunners }
+    $planCfg = @()
+    if ($env:GOPS_ROUND_PLAN) {
+      $planCfg = @($env:GOPS_ROUND_PLAN -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    } else {
+      try {
+        $cj = Get-Content (Join-Path $PSScriptRoot "config.json") -Raw | ConvertFrom-Json
+        $planCfg = @($cj.platformsEnabled.PSObject.Properties | Where-Object { $_.Value -eq $true } | ForEach-Object { $_.Name })
+      } catch { $planCfg = @() }
+    }
+    if (@($planCfg).Count -eq 0) { Write-Host "[round] empty plan (no GOPS_ROUND_PLAN and no config.json)"; exit 3 }
+  $rid = "run_daily-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+  $roundRoot = if ($env:GOPS_ROUND_WORKDIR) { $env:GOPS_ROUND_WORKDIR } elseif ($env:GOPS_STATE_ROOT) { Join-Path $env:GOPS_STATE_ROOT "round" } else { Join-Path $PSScriptRoot "data\round" }
+  $st = Invoke-RoundRun -WorkDir $roundRoot -Plan $planCfg -RunId $rid -Entry daily -Runners $runners
+  Write-Host ("[round] state=" + $st.state + " joined=" + $st.summary.joined + " pending=" + $st.summary.pending)
+  exit 0
+}# run_daily.ps1 —— 计划任务入口：hub 探活 + 外部平台 worker。
 # 停止运行 = 本轮停止信号（不写全局急停）；跳过平台 = 当前平台退出后继续。
 $ErrorActionPreference = "Continue"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -11,6 +32,7 @@ $log = Join-Path $logDir "daily.log"
 . (Join-Path $here "lib\worker_control.ps1")
 . (Join-Path $here "lib\run_control.ps1")
 . (Join-Path $here "lib\platform_cooldown.ps1")
+. (Join-Path $here "lib\round_report.ps1")
 
 function Log($m) {
   $line = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss") + "  " + $m
@@ -36,6 +58,19 @@ function Set-Pipe([string]$current, [string]$next, [string]$state, [string]$err,
 }
 function Stop-Now([string]$where) {
   Set-Pipe $where "" "stopped" "" $null
+  try {
+    . (Join-Path $here "lib\run_summary.ps1")
+    $rp = @($script:reportPlan)
+    if (@($rp).Count -eq 0) { $rp = @($script:plats) }
+    if (@($rp).Count -eq 0) { $rp = @("Facebook", "Telegram", "Reddit", "WhatsApp", "Steam") }
+    $rr = @{}
+    foreach ($pp in $rp) {
+      if ($script:hubResults -and $script:hubResults.ContainsKey($pp)) { $rr[$pp] = $script:hubResults[$pp] }
+      else { $rr[$pp] = New-PlatformResult -Platform $pp -Result "未运行" }
+    }
+    $rep = New-RoundReport -Plan $rp -Results $rr -StartedAt $script:pipe.started_at -EndedAt (Get-Date) -Code "stopped" -StopReason ("停在 " + $where) -LateCount ([int]$script:lateCount) -RunId $script:runId
+    $null = Write-RunSummary -BaseDir $here -RunId $script:runId -StartedAt $script:pipe.started_at -Ok $false -Code "stopped" -Reason $rep.summary -Reasons @($rep.lines) -Platforms @($rp) -Extra @{ report = @($rep.lines); report_text = $rep.text; platform_results = $rep.results; late_receipts = [int]$script:lateCount }
+  } catch { Log ("stop summary failed: " + $_.Exception.Message) }
   Close-RunControl -BaseDir $here -RunId $runId -State "stopped" | Out-Null
   Log ("stop signal -> 停在 " + $where)
   exit 0
@@ -96,25 +131,53 @@ if ($env:GOPS_OFFLINE -ne "1") {
   Log "hub probe skipped (offline test)"
 }
 
-# 1) hub 平台（TG/FB/Reddit 的 hub 阶段）
+# 1) hub 平台（仅 Facebook/Telegram/Reddit；每平台独立一轮，逐平台等待完成）
 Set-Pipe "hub" "Steam" "running" "" 0
 $env:GOPS_PLATFORM = "hub"
-foreach ($p in $plats) {
-  if (Stop-Requested) { Stop-Now "hub" }
+$hubPlats = @("Facebook", "Telegram", "Reddit")
+$hubResults = @{}
+$lateCount = 0
+$stateReport = ""
+$reportPlan = @($plats)
+if (@($reportPlan).Count -eq 0) { $reportPlan = @("Facebook", "Telegram", "Reddit", "WhatsApp", "Steam") }
+$finalCode = "complete"
+$stopReason = ""
+foreach ($p in $hubPlats) {
+  if (Stop-Requested) { $finalCode = "stopped"; $stopReason = "收到本轮停止信号"; break }
   if (Skip-Requested "hub") { Log "skip platform hub"; break }
   $q = 0
   try { if ($cfg.quotas.PSObject.Properties.Name -contains $p) { $q = [int]$cfg.quotas.$p } } catch { }
   if ($q -le 0) { Log ("skip " + $p + " (quota 0)"); continue }
+  $hubState = $null
   try {
     $body = @{ action = "start"; platform = $p; run_id = $runId } | ConvertTo-Json -Compress
     Invoke-RestMethod "http://127.0.0.1:8787/control" -Method Post -ContentType "application/json" -Body $body -TimeoutSec 15 | Out-Null
     Log ("started " + $p + " quota=" + $q)
-  } catch {
-    Log ("start failed: " + $_.Exception.Message)
+    $deadline = (Get-Date).AddMinutes(30)
+    while ((Get-Date) -lt $deadline) {
+      if (Stop-Requested) { break }
+      try { $hubState = Invoke-RestMethod "http://127.0.0.1:8787/state" -TimeoutSec 5 } catch { Start-Sleep -Seconds 2; continue }
+      if ([string]$hubState.run_id -and [string]$hubState.run_id -ne $runId) { Log ("hub run mismatch: " + [string]$hubState.run_id); break }
+      if (-not [bool]$hubState.running) { break }
+      Start-Sleep -Seconds 2
+    }
+  } catch { Log ("start failed: " + $_.Exception.Message) }
+  if ($hubState) {
+    $ps = $null
+    try { $ps = $hubState.platformStats.$p } catch { }
+    if (-not $ps) { $ps = New-PlatformResult -Platform $p -Result "完成" }
+    if ([string]$hubState.report_text) { $stateReport = [string]$hubState.report_text }
+    try { $lateCount = [Math]::Max($lateCount, [int]$hubState.late_receipts) } catch { }
+    if ([string]$ps.result -eq "未运行" -or [string]$ps.result -eq "进行中") { $ps.result = "完成" }
+    if ([string]$ps.result -eq "部分完成（已停止新派发）") { $finalCode = "partial_complete" }
+    $hubResults[$p] = $ps
+    Log ("hub " + $p + " done result=" + $ps.result + " joined=" + $ps.joined + " existing=" + $ps.existing + " unconfirmed=" + $ps.unconfirmed + " failed=" + $ps.failed)
+  } else {
+    $hubResults[$p] = New-PlatformResult -Platform $p -Result "失败" -Reason "hub 未返回状态"
+    $finalCode = "partial_complete"
   }
-  $sig = Wait-Signal "hub" 3
-  if ($sig -eq "stop" -or (Stop-Requested)) { Stop-Now "hub" }
-  if ($sig -eq "skip" -or (Skip-Requested "hub")) { Log "skip platform hub"; break }
+  if (Stop-Requested) { $finalCode = "stopped"; $stopReason = "收到本轮停止信号"; break }
+  if (Skip-Requested "hub") { Log "skip platform hub"; break }
 }
 Set-Pipe "Steam" "Reddit" "running" "" 1
 
@@ -221,14 +284,20 @@ if ($waOn) {
   }
 }
 
-if (Stop-Requested) { Stop-Now "final" }
+if (Stop-Requested) { $finalCode = "stopped"; $stopReason = "收到本轮停止信号" }
 Complete-RunControl -BaseDir $here -RunId $runId | Out-Null
-Set-Pipe "" "" "complete" "" $steps.Count
+Set-Pipe "" "" $(if ($finalCode -eq "complete") { "complete" } else { $finalCode }) "" $steps.Count
 try {
   . (Join-Path $here "lib\run_summary.ps1")
   $rsReasons = @(Get-RunReasonFromLog -LogPath $log -Tail 600)
-  $rsOk = ($rsReasons -notcontains "采样有失败目标")
-  $null = Write-RunSummary -BaseDir $here -RunId $runId -StartedAt $pipe.started_at -Ok $rsOk -Code "complete" -Reasons $rsReasons -Platforms $steps
+  $rsOk = ($finalCode -eq "complete") -and ($rsReasons -notcontains "采样有失败目标")
+  $reportResults = @{}
+  foreach ($p in $reportPlan) {
+    if ($hubResults.ContainsKey($p)) { $reportResults[$p] = $hubResults[$p] }
+    else { $reportResults[$p] = New-PlatformResult -Platform $p -Result "完成（外部阶段未统计）" }
+  }
+  $rep = New-RoundReport -Plan $reportPlan -Results $reportResults -StartedAt $pipe.started_at -EndedAt (Get-Date) -Code $finalCode -StopReason $stopReason -LateCount $lateCount -RunId $runId
+  $null = Write-RunSummary -BaseDir $here -RunId $runId -StartedAt $pipe.started_at -Ok $rsOk -Code $finalCode -Reason $rep.summary -Reasons @($rep.lines) -Platforms @($reportPlan) -Extra @{ report = @($rep.lines); report_text = $rep.text; platform_results = $rep.results; late_receipts = [int]$lateCount }
 } catch { Log ("run summary failed: " + $_.Exception.Message) }
 Log "run_daily complete"
 exit 0
