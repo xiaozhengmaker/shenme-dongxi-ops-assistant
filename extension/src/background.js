@@ -1,4 +1,4 @@
-﻿// background.js —— 调度循环：向本地 hub 取任务 → 在页面里执行 → 回传结果
+// background.js —— 调度循环：向本地 hub 取任务 → 在页面里执行 → 回传结果
 const HUB = "http://127.0.0.1:8787";
 let timer = null;
 let busy = false;
@@ -33,14 +33,37 @@ async function hubControl(action, extra) {
   return { ok: true, data: data };
 }
 
+// —— 页面归属判断：解析 hostname，只认同名 host 或官方子域，不做子串匹配 ——
+// 反例（必须判否）：evil-telegram.org、telegram.org.evil.io、notfacebook.com
+function urlHost(u) {
+  try { return new URL(String(u || "")).hostname.toLowerCase(); } catch (e) { return ""; }
+}
+function hostMatches(hostname, want) {
+  const h = String(hostname || "").toLowerCase();
+  const w = String(want || "").toLowerCase();
+  return !!h && !!w && (h === w || h.endsWith("." + w));
+}
+
+// 平台 → 页面 host。这里没有的平台就没有页面执行器，findTab 返回 null，绝不回落到 Telegram。
+const TAB_HOSTS = {
+  telegram: "web.telegram.org",
+  facebook: "facebook.com",
+  reddit: "reddit.com"
+};
+// background 只有 Telegram / Facebook 的页面执行器（probe/search/join 注入的是这两个平台的专用页面代码）。
+// Reddit / WhatsApp / Steam / Discord 有各自入口（run_daily 的专用 runner），不能被当成普通 hub 任务注进别的标签页。
+const TASK_EXECUTORS = { telegram: "tg", facebook: "fb" };
+function executorOf(platform) {
+  return TASK_EXECUTORS[String(platform || "").toLowerCase()] || null;
+}
+
 async function findTab(platform) {
   const pf = String(platform || "").toLowerCase();
-  const key = pf === "facebook" ? "facebook.com"
-            : pf === "reddit" ? "reddit.com"
-            : "web.telegram.org";
+  const want = TAB_HOSTS[pf];
+  if (!want) { await log("no tab mapping for " + (platform || "") + " (no page executor)"); return null; }
   let tabs = [];
   try { tabs = await chrome.tabs.query({}); } catch (e) { tabs = []; }
-  const hit = tabs.filter(x => (x.url || "").includes(key));
+  const hit = tabs.filter(x => hostMatches(urlHost(x && x.url), want));
   const t = hit.find(x => x.status !== "discarded") || hit[0];
   if (!t) await log("no tab for " + platform + " (tabs=" + tabs.length + ")");
   return t || null;
@@ -182,16 +205,27 @@ async function tick() {
     const task = await res.json();
     if (!task || !task.action) return;
 
-    const tab = await findTab(task.platform || "telegram");
+    // 平台守卫：没有页面执行器的平台一律显式回 platform_unsupported。
+    // 绝不 findTab 回落 Telegram——那会把 Reddit/WhatsApp/Steam 的任务静默跑成 TG。
+    const pf = String(task.platform || "").toLowerCase();
+    const ex = executorOf(pf);
+    if (!ex) {
+      await log("拒绝非本扩展平台任务：" + (task.platform || "?") + " " + String(task.action));
+      await hubFetch("/result", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: task.action, id: task.id, ok: false, error: "platform_unsupported", platform: pf }) });
+      return;
+    }
+
+    const tab = await findTab(pf);
     if (!tab) {
-      await log("no tab for " + (task.platform || "telegram"));
+      await log("no tab for " + pf);
       await hubFetch("/result", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ kind: task.action, id: task.id, ok: false, error: "no_tab" }) });
       return;
     }
 
     if (task.action === "probe") {
-      if (String(task.platform || "").toLowerCase() === "facebook") {
+      if (ex === "fb") {
         await hubFetch("/result", { method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ kind: "probe", id: task.id, ok: true, value: { self: "fb" } }) });
         return;
@@ -204,7 +238,7 @@ async function tick() {
     }
 
     if (task.action === "search") {
-      if (String(task.platform || "").toLowerCase() === "facebook") {
+      if (ex === "fb") {
         const qenc = encodeURIComponent(task.query);
         const url = "https://www.facebook.com/search/groups/?q=" + qenc;
         await chrome.tabs.update(tab.id, { url });
@@ -239,7 +273,7 @@ async function tick() {
     }
 
     if (task.action === "join") {
-      if (String(task.platform || "").toLowerCase() === "facebook") {
+      if (ex === "fb") {
         if (task.q) {
           try { await chrome.tabs.update(tab.id, { url: "https://www.facebook.com/search/groups/?q=" + encodeURIComponent(task.q), active: true }); } catch (_) { await chrome.tabs.update(tab.id, { url: "https://www.facebook.com/search/groups/?q=" + encodeURIComponent(task.q) }); }
           try { await chrome.windows.update(tab.windowId, { focused: true }); } catch (_) {}
@@ -423,55 +457,120 @@ const PRELOAD_URLS = {
   steam: "https://steamcommunity.com/"
 };
 
-function probeLoginFn(key) {
-  try {
-    if (key === "telegram") return !!(window.rootScope || document.querySelector("#column-center"));
-    if (key === "facebook") return (document.cookie || "").indexOf("c_user=") >= 0;
-    if (key === "discord") {
-      if (document.querySelector("input[name='email']") || document.querySelector("[class*='loginForm']")) return false;
-      if (document.querySelector("[class*='guilds']")) return true;
-      return !!document.querySelector("[class*='sidebar']") && !!document.querySelector("[class*='chat']");
-    }
-    if (key === "whatsapp") return !!document.querySelector("#pane-side");
-    if (key === "reddit") {
-      if (document.querySelector("input[type=password]")) return false;
-      return !!(document.querySelector("shreddit-app") || document.querySelector("#header") || document.querySelector("faceplate-tracker"));
-    }
-    if (key === "steam") {
-      if (document.querySelector("a.global_action_link[href*='login']")) return false;
-      return !!(document.querySelector("#account_pulldown") || document.querySelector(".playerAvatar"));
-    }
-  } catch (e) {}
-  return false;
+// 平台显示名 / 缩写 / 大小写归一；未知和预留平台（如 Instagram）直接跳过。
+const PRELOAD_ALIAS = {
+  telegram: "telegram", tg: "telegram",
+  facebook: "facebook", fb: "facebook",
+  discord: "discord", dc: "discord",
+  whatsapp: "whatsapp", wa: "whatsapp",
+  reddit: "reddit", rd: "reddit",
+  steam: "steam"
+};
+function normalizePreloadKeys(platforms) {
+  const seen = {}, out = [];
+  for (const raw of (platforms || [])) {
+    const k = PRELOAD_ALIAS[String(raw == null ? "" : raw).trim().toLowerCase()];
+    if (!k || seen[k] || !PRELOAD_URLS[k]) continue;
+    seen[k] = 1;
+    out.push(k);
+  }
+  return out;
 }
 
+// 登录态探针：只在页面里运行，返回严格三态 true / false / null。
+//   true  = 有明确「已登录账户」证据（账户菜单、私聊列表等只有登录后才出现的元素）
+//   false = 有明确「登录/注册表单」证据，且没有账户证据
+//   null  = 没有证据（公开页、页面还没渲染、cookie 不可见等都算没有证据）→ 侧栏显示「待确认」
+// 注意：不能凭公开元素（Reddit shreddit-app/#header、Steam .playerAvatar、FB cookie）下结论；
+// FB 的 c_user 是 HttpOnly，document.cookie 里本来就看不到，所以不再读 cookie。
+function probeLoginFn(key) {
+  try {
+    const doc = document;
+    const hit = (list) => {
+      for (let i = 0; i < list.length; i++) {
+        try { if (doc && doc.querySelector(list[i])) return true; } catch (e) {}
+      }
+      return false;
+    };
+    const rules = {
+      telegram: {
+        in: [".chat-list", ".chatlist", "#column-center .chatlist-chat", "#column-center .chatlist-parts"],
+        out: ["#auth-pages", ".auth-pages", ".auth-pages-wrapper", "#login-form", ".login-form"]
+      },
+      facebook: {
+        in: ['[aria-label="Your profile"]', "[aria-label='你的个人主页']", '[aria-label="Account menu"]'],
+        out: ["#login_form", "form[data-testid='royal_login_form']", "input[name='pass']"]
+      },
+      discord: {
+        in: ["[class*='guilds']", "[data-list-id='guildsnav']", "[class*='chatContent']"],
+        out: ["[class*='authBox']", "[class*='loginForm']", "[class*='authLogin']"]
+      },
+      whatsapp: {
+        in: ["#pane-side", "[data-testid='chat-list']"],
+        out: ["[data-testid='qrcode']", "#qrcode", ".landing-title"]
+      },
+      reddit: {
+        in: ["#expand-user-drawer-button", '[aria-label="Open profile menu"]', '[aria-label="Open user profile menu"]'],
+        out: ["a[href='/login']", "a[href='/register']", "shreddit-login", "input[name='password']"]
+      },
+      steam: {
+        in: ["#account_pulldown", "#header .user_avatar"],
+        out: ["a.global_action_link[href*='login']", "a.global_action_link[href*='join']"]
+      }
+    };
+    const rule = rules[String(key || "").toLowerCase()];
+    if (!rule) return null;
+    if (hit(rule.in)) return true;   // 账户证据优先（登录页一般不会同时出现账户菜单）
+    if (hit(rule.out)) return false; // 明确的登录/注册表单
+    return null;                     // 缺证据：不能断「未登录」
+  } catch (e) {
+    return null;
+  }
+}
+
+// 预载 = 只开网页 + 探登录态，绝不启动运行。
+// 每个平台返回：{ key, url, opened, settled, logged, probe, attempts, error }
+// settled=false 表示页面没在限定时间内加载完 → 侧栏必须显示「待确认」，不能当作未登录。
 async function handlePreload(platforms, opts) {
   const recheck = !!(opts && opts.recheck);
+  const keys = normalizePreloadKeys(platforms);
   const out = [];
-  for (const key of (platforms || [])) {
+  for (const key of keys) {
     const url = PRELOAD_URLS[key];
-    if (!url) continue;
-    const host = url.replace("https://", "").split("/")[0].replace("www.", "");
-    let tabs = await chrome.tabs.query({});
-    let tab = tabs.find(t => (t.url || "").indexOf(host) >= 0);
+    const want = urlHost(url).replace(/^www\./, "");
+    let tabs = [];
+    try { tabs = await chrome.tabs.query({}); } catch (e) { tabs = []; }
+    let tab = (tabs || []).find(t => hostMatches(urlHost(t && t.url), want));
     let opened = false;
     if (!tab) {
-      tab = await chrome.tabs.create({ url, active: false });
-      opened = true;
-      await new Promise(r => setTimeout(r, 3500));
+      try { tab = await chrome.tabs.create({ url, active: false }); opened = true; }
+      catch (e) { tab = null; }
     } else if (recheck) {
       try { await chrome.tabs.update(tab.id, { active: true }); } catch (e) {}
-      await new Promise(r => setTimeout(r, 1200));
     }
-    let logged = null, err = null;
-    for (let i = 0; i < 3; i++) {
-      try {
-        const r = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: probeLoginFn, args: [key] });
-        logged = !!(r && r[0] && r[0].result);
-        break;
-      } catch (e) { err = String(e && e.message || e); await new Promise(r2 => setTimeout(r2, 1500)); }
+    let settled = false;
+    if (tab && tab.id != null) settled = await waitTab(tab.id, opened || recheck ? 15000 : 6000);
+    let logged = null, probe = "error", err = null, attempts = 0;
+    if (tab && tab.id != null) {
+      for (let i = 0; i < 3; i++) {
+        attempts++;
+        try {
+          const r = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: probeLoginFn, args: [key] });
+          const first = Array.isArray(r) ? r[0] : null;
+          const v = first ? first.result : undefined;
+          // 三态：只有明确 true/false 才采信；空结果/无证据/异常值 → null（侧栏待确认）
+          logged = (v === true || v === false) ? v : null;
+          probe = "ok"; err = null;
+          break;
+        } catch (e) {
+          probe = "error"; logged = null; err = String((e && e.message) || e);
+          if (i < 2) await sleep(1200);
+        }
+      }
+    } else {
+      err = "tab_unavailable";
     }
-    out.push({ key, url, opened, logged, error: err });
+    out.push({ key, url, opened, settled, logged, probe, attempts, error: err });
   }
   return { ok: true, results: out };
 }
@@ -479,9 +578,18 @@ async function handlePreload(platforms, opts) {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === "preload") { handlePreload(msg.platforms, { recheck: !!msg.recheck }).then(sendResponse); return true; }
   if (msg && msg.type === "start") {
+    // 二道守卫：即使调用方漏过滤，也不把无页面执行器的平台发给 hub。
+    const requested = Array.isArray(msg.platforms) ? msg.platforms : null;
+    const requestedOrder = Array.isArray(msg.order) ? msg.order : requested;
+    const runnable = requested ? requested.filter(function (p) { return !!executorOf(p); }) : null;
+    const runnableOrder = requestedOrder ? requestedOrder.filter(function (p) { return !!executorOf(p); }) : runnable;
+    if (requested && !runnable.length) {
+      sendResponse({ ok: false, error: "no_runnable_platforms", detail: "可启动平台只有 Facebook / Telegram；其余平台请预载或由 run_daily 专用 runner 执行" });
+      return;
+    }
     (async () => {
       try {
-        const r = await hubControl("start", { source: "ui", platforms: msg.platforms || null, order: msg.order || null });
+        const r = await hubControl("start", { source: "ui", platforms: runnable, order: runnableOrder });
         if (!r.ok) { sendResponse({ ok: false, error: r.error, detail: r.detail }); return; }
         await setState({ running: true, stats: { joined: 0, failed: 0, skipped: 0 } });
         ensureAlarm();
@@ -629,7 +737,8 @@ async function waitTab(tabId, timeoutMs) {
   const limit = timeoutMs || 15000;
   const started = Date.now();
   while (Date.now() - started < limit) {
-    const t = await chrome.tabs.get(tabId);
+    let t = null;
+    try { t = await chrome.tabs.get(tabId); } catch (e) { return false; } // 标签被关掉：视为未加载完成
     if (t && t.status === "complete") return true;
     await sleep(300);
   }

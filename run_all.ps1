@@ -1,7 +1,7 @@
 ﻿# run_all.ps1 -- 一键全流程：拓群(多平台) -> 成员采样 -> 人数回填 -> Steam 抽样导入 -> 可选日报
 # 由看板「开始运行」触发（hub /control {"action":"pipeline"}），也可手动跑。
 param(
-  [string[]]$Platforms = @("Telegram","Facebook","Reddit"),
+  [string[]]$Platforms = @("Telegram","Facebook"),
   [switch]$SkipMembers,
   [switch]$SkipSteam,
   [switch]$SkipLeads,
@@ -49,9 +49,15 @@ $global:GOPS_SUMMARY = @{ Done = $false; BaseDir = $baseDir; RunId = $runId; Sta
 Register-EngineEvent -SourceIdentifier PowerShell.Exiting -SupportEvent -Action {
   try {
     $g = $global:GOPS_SUMMARY
-    if ($g -and (-not $g.Done)) {
+    if ($g) {
       . (Join-Path $g.BaseDir "lib\run_summary.ps1")
-      $null = Write-RunSummary -BaseDir $g.BaseDir -RunId $g.RunId -StartedAt $g.StartedAt -Ok $false -Code "aborted" -Reason "脚本未走到收尾就退出（异常/强制终止）"
+      . (Join-Path $g.BaseDir "lib\run_control.ps1")
+      . (Join-Path $g.BaseDir "lib\pipeline_status.ps1")
+      Close-RunControl -BaseDir $g.BaseDir -RunId $g.RunId -State "stopped" -OnlyIfRunning | Out-Null
+      Close-PipelineStatusForRun -BaseDir $g.BaseDir -RunId $g.RunId -State "failed" -Error "aborted" -OnlyIfRunning | Out-Null
+      if (-not $g.Done) {
+        $null = Write-RunSummary -BaseDir $g.BaseDir -RunId $g.RunId -StartedAt $g.StartedAt -Ok $false -Code "aborted" -Reason "脚本未走到收尾就退出（异常/强制终止）"
+      }
     }
   } catch { }
 } | Out-Null
@@ -63,7 +69,7 @@ function Set-Pipe([string]$current, [string]$next, [string]$state, [string]$err)
     if ($state) { $script:pipe.state = $state }
     if ($err) { $script:pipe.last_error = $err }
     Save-PipelineStatus -Path $script:pipePath -Status $script:pipe
-    if ($script:runRegistered -and $current) { Update-RunControlPlatform -BaseDir $baseDir -RunId $runId -Current $current | Out-Null }
+    # current_platform is a platform, not a phase; startCb updates it explicitly.
   } catch { }
 }
 function StoppedNow {
@@ -96,11 +102,19 @@ $Platforms = @($Platforms | ForEach-Object { $_ -split "," } | ForEach-Object { 
 if ($enabled.Count -gt 0) {
   $Platforms = @($Platforms | Where-Object { $enabled.ContainsKey($_) -and $enabled[$_] })
 }
+$manualExec = @("Telegram", "Facebook")
+$unsupported = @($Platforms | Where-Object { $manualExec -notcontains [string]$_ })
+if ($unsupported.Count -gt 0) {
+  Say ("run_all 只驱动扩展执行器平台（Telegram/Facebook）；本轮收到：" + ($unsupported -join "、") + "。Reddit/Steam/WhatsApp 请用 run_daily 的专用 runner。")
+  Set-Pipe "" "" "failed" "platform_no_manual_executor"
+  Finish-Summary -Code "platform_no_manual_executor" -Ok $false -Reason ("不支持手动执行的平台：" + ($unsupported -join "、"))
+  exit 2
+}
 if ($Platforms.Count -eq 0) { Set-Pipe "" "" "complete" ""; Say "没有已启用平台，退出"; Finish-Summary -Code "no_platforms" -Ok $true -Reason "没有已启用平台"; exit 0 }
 $script:pipe = New-PipelineStatus -RunId $runId -Platforms $Platforms
 $script:runRegistered = $false
 $reg = Register-RunControl -BaseDir $baseDir -RunId $runId -Platforms $Platforms -Current ([string]$Platforms[0])
-if (-not $reg.ok) { Say ("已有运行中的 run，退出：" + [string]$reg.run_id); Finish-Summary -Code "already_running" -Ok $false -Reason ("已有运行中的 run：" + [string]$reg.run_id); exit 0 }
+if (-not $reg.ok) { Say ("已有运行中的 run，退出：" + [string]$reg.run_id); Close-PipelineStatusForRun -BaseDir $baseDir -RunId $runId -State "stopped" -Error ("already_running: " + [string]$reg.run_id) -OnlyIfRunning | Out-Null; Finish-Summary -Code "already_running" -Ok $false -Reason ("已有运行中的 run：" + [string]$reg.run_id); exit 0 }
 $script:runRegistered = $true
 $env:GOPS_RUN_ID = $runId
 Set-Pipe "self_check" ([string]$Platforms[0]) "running" ""
@@ -127,6 +141,7 @@ $startCb = {
   param($p)
   if (StoppedNow) { return @{ ok = $false; error = "stopped" } }
   try {
+    Update-RunControlPlatform -BaseDir $baseDir -RunId $runId -Current $p | Out-Null
     Hub "POST" "/control" @{ action = "start"; platform = $p; run_id = $runId } | Out-Null
     return @{ ok = $true }
   } catch {
@@ -148,7 +163,16 @@ $waitCb = {
   while ((Get-Date) -lt $deadline) {
     if (StoppedNow) { return $false }
     if (Test-RunPlatformSkip -BaseDir $baseDir -RunId $runId -Platform $p) {
-      try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true } | Out-Null } catch { }
+      try { Hub "POST" "/control" @{ action = "skip_platform"; run_id = $runId; platform = $p } | Out-Null } catch { }
+      # Do not start the next platform until the hub has actually left this
+      # round; otherwise the next start races a still-running external round.
+      $sd = (Get-Date).AddSeconds(180)
+      $idle = $false
+      while ((Get-Date) -lt $sd) {
+        try { $hh = Hub "GET" "/health" $null; if (-not $hh.running) { $idle = $true; break } } catch { }
+        Start-Sleep -Seconds 2
+      }
+      if (-not $idle) { throw "hub did not stop after skip" }
       return "skip"
     }
     Start-Sleep -Seconds 10
@@ -156,7 +180,11 @@ $waitCb = {
     if ($h.phase -ne $lastPhase) { $lastPhase = $h.phase; Say ("  " + $p + " phase=" + $h.phase) }
     if (-not $h.running) { return $true }
   }
-  return $false
+  # A wait timeout means the hub round is no longer trustworthy. Close only
+  # this run (cleanup requires run_id) and surface a global failure instead of
+  # starting the next platform against a still-running external round.
+  try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true; run_id = $runId } | Out-Null } catch { }
+  throw ("platform wait timeout: " + $p)
 }
 $res = Invoke-PlatformSequence -Platforms $Platforms -Start $startCb -Wait $waitCb -IsStopped { StoppedNow } -IsSkipped { param($p) Test-RunPlatformSkip -BaseDir $baseDir -RunId $runId -Platform $p } -Say { param($m) Say $m }
 $fail += @($res.failed)
@@ -165,7 +193,7 @@ if ($res.status -eq "stopped") {
   Set-Pipe "platform_scan" "" "stopped" ""
   Say "stop signal -> 退出"
   Finish-Summary -Code "stopped" -Ok $true -Reason "用户停止（运行中被要求停止）"
-  try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true } | Out-Null } catch { }
+  try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true; run_id = $runId } | Out-Null } catch { }
   Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null
   exit 0
 }
@@ -173,7 +201,7 @@ if ($res.status -eq "global_failure") {
   Set-Pipe "platform_scan" "" "failed" ([string]$res.error)
   Say ("全局故障，中止本轮：" + [string]$res.error)
   Finish-Summary -Code "global_failure" -Ok $false -Reason ("全局故障：" + [string]$res.error) -Errors @([string]$res.error)
-  try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true } | Out-Null } catch { }
+  try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true; run_id = $runId } | Out-Null } catch { }
   Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null
   exit 4
 }
@@ -233,11 +261,17 @@ if ($autoReport) {
   ($out5 | Select-String "webhook|合计|failed|error" | Select-Object -Last 3) | ForEach-Object { Say ("  " + $_.Line) }
 }
 
-try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true } | Out-Null } catch { }
 if ($fail.Count -gt 0) { Set-Pipe "done" "" "failed" ($fail -join ","); Finish-Summary -Code "failed" -Ok $false -Reason ("失败平台：" + ($fail -join ",")) -Errors @($fail); Say ("=== run_all 结束，失败平台：" + ($fail -join ",") + " ==="); Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null; exit 4 }
 Set-Pipe "leads" "" "running" ""
 if (-not $SkipLeads) {
-  if (StoppedNow) { Set-Pipe "leads" "" "stopped" ""; Say "stop signal present, skip leads" }
+  if (StoppedNow) {
+    Set-Pipe "leads" "" "stopped" ""
+    Say "stop signal present, skip leads"
+    Finish-Summary -Code "stopped" -Ok $true -Reason "用户停止（leads 阶段）"
+    try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true; run_id = $runId } | Out-Null } catch { }
+    Close-RunControl -BaseDir $baseDir -RunId $runId -State "stopped" | Out-Null
+    exit 0
+  }
   else {
     Say "--- 线索流水线（扫描/打分/入库）"
     try {
@@ -250,4 +284,5 @@ if (-not $SkipLeads) {
 Set-Pipe "" "" "complete" ""
 Complete-RunControl -BaseDir $baseDir -RunId $runId | Out-Null
 Finish-Summary -Code "complete" -Ok $true -Reason "正常完成"
+try { Hub "POST" "/control" @{ action = "stop"; cleanup = $true; run_id = $runId } | Out-Null } catch { }
 Say "=== run_all 全部完成 ==="

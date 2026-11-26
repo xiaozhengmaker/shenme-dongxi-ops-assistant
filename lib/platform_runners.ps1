@@ -1,7 +1,9 @@
 ﻿function New-PlatformRunners {
   param([string]$HubBase = "http://127.0.0.1:8787", [int]$JoinTimeoutSec = 900)
   $map = @{}
-  foreach ($p in @("Facebook","Telegram","Reddit","WhatsApp","Steam")) {
+  # hub /control start 只接受有扩展页面执行器的平台；Reddit/WhatsApp/Steam 由 run_daily 的专用 runner 执行。
+  # 放进这张表会让 round_engine 把它们当 hub 平台启动，重演错平台 bug。
+  foreach ($p in @("Facebook","Telegram")) {
     $plat = $p
     $map[$plat] = {
       param($platform, $DataDir)

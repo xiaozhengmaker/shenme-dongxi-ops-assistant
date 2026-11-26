@@ -19,14 +19,15 @@ function sliceFn(src, name) {
   return src.slice(m.index, i + 1);
 }
 
-const NAMES = ["ctxAlive", "selectedPlatforms", "sendWithTimeout", "sendOnce", "requestStart"];
+const NAMES = ["ctxAlive", "selectedPlatforms", "isRunnablePlatform", "runnablePlatforms", "sendWithTimeout", "sendOnce", "requestStart"];
 const body =
   "const START_TIMEOUT_MS = 5000; var RUN_BUSY = false;\n" +
+  'const RUN_PLATFORMS = ["Telegram", "Facebook"];\n' +
   "function showFeedback() {}\nfunction friendlyError(r) { return (r && r.error) || 'err'; }\n" +
   "function setRunBusy(v) { RUN_BUSY = !!v; }\n" +
   "async function refresh() { return true; }\n" +
   NAMES.map((n) => sliceFn(SRC, n)).join("\n") +
-  "\n;return { requestStart, sendWithTimeout, selectedPlatforms, get busy() { return RUN_BUSY; } };";
+  "\n;return { requestStart, sendWithTimeout, selectedPlatforms, runnablePlatforms, get busy() { return RUN_BUSY; } };";
 
 function makeEnv(checked) {
   const sent = [];
@@ -88,12 +89,21 @@ function A(c, m) { if (!c) throw new Error(m); }
   });
 
   await T("multi-selected-order", async () => {
-    const { api, sent } = makeEnv(["Telegram", "Steam", "Reddit"]);
+    // 混合勾选：Steam/Reddit 只预载/由计划任务执行，不得进入 start 载荷（否则会被跑成 Telegram）。
+    const { api, sent } = makeEnv(["Telegram", "Steam", "Reddit", "Facebook"]);
     await api.requestStart();
     A(sent.length === 1, "sent=" + sent.length);
     const m = sent[0];
-    A(JSON.stringify(m.platforms) === JSON.stringify(["Telegram", "Reddit", "Steam"]), "dom order expected; got=" + JSON.stringify(m.platforms));
+    A(JSON.stringify(m.platforms) === JSON.stringify(["Facebook", "Telegram"]), "runnable dom order expected; got=" + JSON.stringify(m.platforms));
     A(JSON.stringify(m.order) === JSON.stringify(m.platforms), "order must equal platforms");
+    A(m.platforms.indexOf("Steam") < 0 && m.platforms.indexOf("Reddit") < 0, "preload-only leaked into start");
+  });
+
+  await T("preload-only-never-starts", async () => {
+    const { api, sent } = makeEnv(["Discord", "Steam", "WhatsApp"]);
+    await api.requestStart();
+    A(sent.length === 0, "preload-only selection must not send start; sent=" + JSON.stringify(sent));
+    A(api.runnablePlatforms().length === 0, "should have no runnable platform");
   });
 
   await T("legacy-call-without-platforms", () => {

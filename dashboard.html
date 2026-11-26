@@ -201,18 +201,7 @@
         <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
     </button>
     <div class="divider"></div>
-    <button class="btn" id="btnStop">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-      停止
-    </button>
-    <button class="btn" id="btnPreload" title="按已勾选平台打开网页并检查登录态">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 0 1 8-8"/><path d="M20 12a8 8 0 0 1-8 8"/><circle cx="12" cy="12" r="2.2"/></svg>
-      预载
-    </button>
-    <button class="btn primary" id="btnStart">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5l11 7-11 7z"/></svg>
-      开始运行
-    </button>
+    <span class="muted" id="runEntryHint" style="font-size:12px;color:#8F959E" title="运行入口在扩展侧栏">运行入口在扩展侧栏（预载 / 启动 / 停止 / 急停）</span>
   </div>
 
   <div id="errBox"></div>
@@ -225,7 +214,6 @@
     </div>
   </div>
 
-  <div id="preloadOut" style="display:none;margin:0 0 10px;padding:10px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;font-size:12.5px"></div>
   <div class="overview" id="overview">
     <div class="sec">
       <div class="sec-h"><b>平台</b><span>勾选即启用 · 点卡片进详情</span></div>
@@ -440,7 +428,6 @@ function render(){
         document.getElementById('lrReason').textContent = lrText + '　｜　' + extra;
       }).catch(function () { });
     } catch (e) { }
-try { syncRunButtons(DATA); } catch(e) {}
 
   drawChart();
   drawDist(byPlat, t);
@@ -557,7 +544,7 @@ function openDetail(k){
       <div class="desc">${t.desc}</div>
       <div class="foot">
         <button class="btn" onclick="openTaskCfg('${k}','${t.id}')">配置</button>
-        <button class="btn primary" onclick="runTask('${k}','${t.id}')">${t.id==='discovery'?'立即加群':'运行'}</button>
+        <span class="muted" style="font-size:11.5px;color:#8F959E">运行入口在侧栏</span>
         <span class="run">${st}</span>
       </div>
     </div>`;
@@ -635,50 +622,16 @@ async function saveTask(k, tid){
   openTaskCfg(k, tid); /* 打开并显示新值 */
 }
 
-async function runTask(k, tid){
-  if(tid !== 'discovery'){
-    alert('「' + (TASKS.find(function(x){return x.id===tid;}).name) + '」的数据管线还没接上，先把拓群跑通。');
-    return;
-  }
-  await runPlatform(k);
-}
 function toggleFromDetail(k){
   if(isEnabled(k)) enabled = enabled.filter(function(x){return x!==k;}); else enabled.push(k);
   saveEnabled(); openDetail(k);
-}
-async function runPlatform(k){
-  try{
-    await fetch('/control', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'start', platform:k})});
-  }catch(e){}
-  load();
 }
 document.getElementById('btnBack').addEventListener('click', function(){
   document.getElementById('detail').classList.remove('show');
   document.getElementById('overview').classList.remove('hide');
 });
 
-function syncRunButtons(d){
-  var b = document.getElementById('btnStart');
-  if (!b) return;
-  var on = !!(d && d.running);
-  b.disabled = on;
-  b.style.opacity = on ? '0.45' : '1';
-  b.style.cursor = on ? 'not-allowed' : 'pointer';
-  b.title = on ? '正在运行中，先停止再启动' : '';
-}
 
-document.getElementById('btnStart').addEventListener('click', async function(){
-  var r = await fetch('/control', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'pipeline'})});
-  var j = null; try { j = await r.json(); } catch(e){}
-  if (j && j.ok) { alert('一键流程已启动：拓群 → 成员采样 → 人数回填 → Steam 抽样 → 日报'); }
-  else { alert('启动失败：' + ((j && (j.error||j.msg)) || r.status)); }
-  load();
-});
-document.getElementById('btnStop').addEventListener('click', async function(){
-  await fetch('/control', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'stop'})});
-  load();
-});
 document.getElementById('btnRefresh').addEventListener('click', load);
 
 load();
@@ -738,7 +691,6 @@ setInterval(load, 15000);
 </div>
 <script src="/src_settings.js"></script>
 <script src="/src_strategy.js"></script>
-
 <script>
 (function(){
   function el(id){ return document.getElementById(id); }
@@ -783,68 +735,6 @@ setInterval(load, 15000);
 })();
 </script>
 
-<script>
-(function(){
-  var KEYMAP = {facebook:'facebook',telegram:'telegram',discord:'discord',reddit:'reddit',whatsapp:'whatsapp',steam:'steam'};
-  function btnEl(){ return document.getElementById('btnPreload'); }
-  function hubProbe(){
-    var row = document.getElementById('plHubRow');
-    if (!row) return;
-    row.innerHTML = '<b style="width:82px">本地后台</b><span style="width:70px;color:#8F959E">检测中…</span><span style="flex:1"></span>';
-    fetch('http://127.0.0.1:8787/health', {cache:'no-store'}).then(function(r){ return r.json(); }).then(function(j){
-      row.innerHTML = '<b style="width:82px">本地后台</b><span style="width:70px;color:#2BA471">已连接</span>'
-        + '<span style="flex:1;color:#646A73;font-size:12px">127.0.0.1:8787 · phase=' + (j.phase||'-') + (j.running?' · 运行中':'') + '</span>';
-    }).catch(function(){
-      row.innerHTML = '<b style="width:82px">本地后台</b><span style="width:70px;color:#D83931">未启动</span>'
-        + '<span style="flex:1;color:#646A73;font-size:12px">看门狗每 5 分钟自动拉起；也可运行 hub_watch.ps1</span>';
-    });
-  }
-  window.addEventListener('message', function(ev){
-    if (ev.source !== window) return;
-    var d = ev.data || {};
-    if (!d.__dshPreloadResult) return;
-    var box = document.getElementById('preloadOut');
-    var b = btnEl();
-    if (b) { b.disabled = false; b.textContent = '预载'; }
-    if (!box) return;
-    var res = (d.data && d.data.results) || [];
-    if (!res.length) { box.style.display='block'; box.textContent='预载未返回结果（扩展未响应）'; return; }
-    var rows = res.map(function(r){
-      var st = r.logged ? '<span style="color:#2BA471">已登录</span>'
-               : (r.error ? '<span style="color:#D83931">探针失败：'+r.error+'</span>'
-                          : '<span style="color:#8F959E">未登录</span>');
-      return '<div style="display:flex;gap:10px;align-items:center;padding:3px 0">'+
-             '<b style="width:82px">'+r.key+'</b><span style="width:70px">'+(r.opened?'新开标签':'已存在')+'</span>'+
-             '<span style="flex:1;color:#646A73;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+r.url+'</span>'+st+'</div>';
-    }).join('');
-    box.style.display='block';
-    box.style.opacity = '1';
-    box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b>预载结果</b><span style="display:flex;gap:12px;align-items:center"><span class="pl-recheck" style="cursor:pointer;color:#3370FF">重新检测</span><span style="cursor:pointer;color:#8F959E" onclick="this.parentNode.parentNode.parentNode.style.display=\'none\'">关闭</span></span></div>'+rows;
-    var hr = document.createElement('div');
-    hr.id = 'plHubRow';
-    hr.style.cssText = 'display:flex;gap:10px;align-items:center;padding:3px 0;border-top:1px dashed #E5E6EB;margin-top:4px';
-    box.appendChild(hr);
-    hubProbe();
-  });
-  document.addEventListener('click', function(e){
-    var rcl = e.target.closest && e.target.closest('.pl-recheck');
-    if (rcl) {
-      var box2 = document.getElementById('preloadOut');
-      if (box2) box2.style.opacity = '0.55';
-      var plats2 = (typeof enabled !== 'undefined' ? enabled : []).map(function(k){ return KEYMAP[k] || k; });
-      window.postMessage({ __dshPreload: true, platforms: plats2, recheck: true }, '*');
-      hubProbe();
-      return;
-    }
-    var b = e.target.closest && e.target.closest('#btnPreload');
-    if (!b) return;
-    b.disabled = true; b.textContent = '预载中…';
-    var plats = (typeof enabled !== 'undefined' ? enabled : []).map(function(k){ return KEYMAP[k] || k; });
-    window.postMessage({ __dshPreload: true, platforms: plats }, '*');
-    setTimeout(function(){ if (b.disabled) { b.disabled=false; b.textContent='预载'; } }, 30000);
-  });
-})();
-</script>
 
 </body>
 </html>

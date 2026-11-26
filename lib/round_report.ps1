@@ -1,5 +1,5 @@
 ﻿# lib/round_report.ps1 — 每轮简短中文报告（计划、各平台新增/已存在/未确认/失败、原因、总结果）
-# 纯格式化，无 I/O；供 hub、run_daily 与离线测试共用。
+# 纯格式化，无 I/O；供 hub、run_daily 与离线测试共用。 
 
 function New-PlatformResult {
   param(

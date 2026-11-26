@@ -69,7 +69,19 @@
   <details class="plats" id="platsBox">
     <summary class="ttl">本次运行平台<span id="platsHint" class="hint">—</span></summary>
     <div id="platList"></div>
+    <div class="hint">仅本次有效：勾选只影响这一次运行，不写入后台设置；平台启用与配额在后台管理。可启动：Telegram / Facebook；Discord / Reddit / WhatsApp / Steam 仅预载或由计划任务执行。</div>
   </details>
+
+  <section class="livebox" id="preloadBox">
+    <div class="ttl">预载 <span id="preloadSummary" class="live-pill">—</span></div>
+    <div class="hint">只打开已选平台网页并检查登录态，不启动运行；无法证明登录时显示「待确认」。</div>
+    <div class="actions">
+      <button id="btnPreload" class="plain">预载并检查登录态</button>
+      <button id="btnRecheck" class="plain" title="对已打开的平台标签重新探测一次">重新检测</button>
+    </div>
+    <ul id="preloadList" class="live-events"></ul>
+    <div class="hint" id="preloadAt"></div>
+  </section>
 
   <section class="livebox" id="waReportBox">
     <div class="ttl">WA 检查 <span id="waStats" class="live-pill">—</span></div>
@@ -104,7 +116,7 @@
   </section>
 
   <section class="lastrunbox" id="lastrunbox" style="display:none">
-    <div class="ttl">上次运行 <span id="lrOk" class="live-pill">—</span></div>
+    <div class="ttl">上次运行 <span id="lrOk" class="live-pill">—</span> <button id="btnCopyBrief" class="ghost" style="font-size:11px;padding:2px 8px;margin-left:6px" title="复制上次运行简报">复制简报</button></div>
     <div id="lrMeta2" class="muted" style="font-size:12px">—</div>
     <div id="lrReason2" style="font-size:12px;margin-top:2px;line-height:1.45;white-space:pre-line">—</div>
   </section>
@@ -117,6 +129,7 @@
   <footer>
     <span id="quota"></span>
   </footer>
+  <script src="panel_core.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

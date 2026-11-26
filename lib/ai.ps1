@@ -29,7 +29,7 @@ function Test-AiReady($cfg) {
   return $true
 }
 
-function Invoke-AiChat($aiCfg, [string]$system, [string]$user, [switch]$JsonMode) {
+function Invoke-AiChat($aiCfg, [string]$system, [string]$user, [switch]$JsonMode, [int]$MaxTokens = 0) {
   $url = ($aiCfg.base_url.TrimEnd("/")) + "/chat/completions"
   $body = @{
     model    = $aiCfg.model
@@ -40,6 +40,7 @@ function Invoke-AiChat($aiCfg, [string]$system, [string]$user, [switch]$JsonMode
     temperature = 0.1
     stream      = $false
   }
+  if ($MaxTokens -gt 0) { $body["max_tokens"] = $MaxTokens }
   if ($JsonMode) { $body["response_format"] = @{ type = "json_object" } }
   $json = $body | ConvertTo-Json -Depth 8 -Compress
   $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)

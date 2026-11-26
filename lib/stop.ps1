@@ -1,4 +1,6 @@
 ﻿function Get-GOpsStopFile([string]$BaseDir) {
+  if ($env:GOPS_STOP_FILE) { return $env:GOPS_STOP_FILE }
+  if ($env:GOPS_STATE_ROOT) { return (Join-Path $env:GOPS_STATE_ROOT "stop.flag") }
   if (-not $BaseDir) { $BaseDir = (Split-Path -Parent $PSScriptRoot) }
   return (Join-Path $BaseDir "data\stop.flag")
 }

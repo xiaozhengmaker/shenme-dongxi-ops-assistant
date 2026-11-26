@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "社么东西 · 社群运营助手",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "本地优先的社群运营助手：用你自己的登录会话，在 Facebook / Telegram 搜索并加入相关群组，结果写入飞书多维表格。",
   "permissions": [
     "storage",

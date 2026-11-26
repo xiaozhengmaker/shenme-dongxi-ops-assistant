@@ -32,22 +32,44 @@ function Save-PipelineStatus {
 }
 
 function New-PipelineStatus {
-  param([string]$RunId, [string[]]$Platforms, [datetime]$Now = (Get-Date))
+  param([string]$RunId, [string[]]$Platforms, [datetime]$Now = (Get-Date), [string[]]$Phases = @(), [int]$Total = -1)
   $list = @($Platforms | Where-Object { $_ })
+  $phaseList = @($Phases | Where-Object { $_ })
   $first = if ($list.Count -gt 0) { [string]$list[0] } else { "" }
   $second = if ($list.Count -gt 1) { [string]$list[1] } else { "" }
+  $totalCount = if ($Total -ge 0) { [int]$Total } else { $list.Count }
   return @{
     run_id = [string]$RunId
     state = "running"
     started_at = $Now.ToString("o")
     updated_at = $Now.ToString("o")
-    total = $list.Count
+    total = $totalCount
     completed = 0
     current_platform = $first
     next_platform = $second
     platforms = @($list)
+    phases = @($phaseList)
     last_error = ""
   }
+}
+
+function Close-PipelineStatusForRun {
+  # Close only the matching run's still-running pipeline record. This is the
+  # owner-side cleanup used by hub recovery and by the run_all/run_daily exit
+  # handlers, so an old run can never overwrite a newer run's status file.
+  param([string]$BaseDir, [string]$RunId, [string]$State = "stopped", [string]$Error = "", [switch]$OnlyIfRunning)
+  try {
+    if (-not $RunId) { return $false }
+    $path = Get-PipelineStatusPath -BaseDir $BaseDir
+    $o = Read-PipelineStatus -Path $path
+    if (-not $o -or [string]$o.run_id -ne $RunId) { return $false }
+    if ($OnlyIfRunning -and [string]$o.state -ne "running") { return $false }
+    $o.state = $State
+    $o.updated_at = (Get-Date).ToString("o")
+    if ($Error) { $o.last_error = $Error }
+    Save-PipelineStatus -Path $path -Status $o
+    return $true
+  } catch { return $false }
 }
 
 function Get-PipelineStatusView {

@@ -1,5 +1,6 @@
 const $ = (id) => document.getElementById(id);
 
+// 运行入口只在扩展侧栏（side panel）：本弹窗只显示状态，不提供启动/停止，避免第二个入口。
 async function refresh() {
   const s = await chrome.storage.local.get(["running", "stats", "lastLog"]);
   const running = !!s.running;
@@ -9,12 +10,8 @@ async function refresh() {
   $("joined").textContent = stats.joined;
   $("bad").textContent = stats.skipped + " / " + stats.failed;
   $("log").textContent = s.lastLog || "";
-  $("start").disabled = running;
-  $("stop").disabled = !running;
 }
 
-$("start").onclick = () => chrome.runtime.sendMessage({ type: "start" }, refresh);
-$("stop").onclick = () => chrome.runtime.sendMessage({ type: "stop" }, refresh);
 $("opts").onclick = () => chrome.runtime.openOptionsPage();
 setInterval(refresh, 1500);
 refresh();

@@ -21,6 +21,9 @@ var START_TIMEOUT_MS = 15000;
 var STOP_TIMEOUT_MS = 10000;
 const STATUS_STALE_SEC = 20;
 const PIPELINE_STALE_SEC = 120;
+// 预载是逐平台开标签+等页面+3 次探针，最慢可能几十秒；超时只标记待确认，不自动重发。
+const PRELOAD_TIMEOUT_MS = 120000;
+var PRELOAD_LAST_AT = 0;
 const $ = (s) => document.querySelector(s);
 let CFG = null;
 let SUM = null;
@@ -110,13 +113,13 @@ function stopFlagKnown() {
 }
 
 function currentRunId() {
-  if (LIVE && LIVE.pipeline && LIVE.pipeline.run_id) return String(LIVE.pipeline.run_id);
-  if (LIVE && LIVE.runControl && LIVE.runControl.run_id) return String(LIVE.runControl.run_id);
+  if (LIVE && LIVE.pipeline && LIVE.pipeline.state === "running" && LIVE.pipeline.run_id) return String(LIVE.pipeline.run_id);
+  if (LIVE && LIVE.runControl && LIVE.runControl.state === "running" && LIVE.runControl.run_id) return String(LIVE.runControl.run_id);
   return "";
 }
 
 function currentPlatform() {
-  if (LIVE && LIVE.pipeline && LIVE.pipeline.current_platform) return String(LIVE.pipeline.current_platform);
+  if (LIVE && LIVE.pipeline && LIVE.pipeline.state === "running" && LIVE.pipeline.current_platform) return String(LIVE.pipeline.current_platform);
   if (LIVE && LIVE.activeLive && LIVE.activePlatform) return String(LIVE.activePlatform);
   return "";
 }
@@ -125,10 +128,22 @@ async function requestStart() {
   if (RUN_BUSY) return;
   const sel = selectedPlatforms();
   if (!sel.length) { showFeedback("没有勾选平台：先勾选（0 个不允许启动）", "warn"); return; }
+  // 只有 Facebook / Telegram 有 background 页面执行器。其余平台只能预载，或由 run_daily 的专用 runner 执行；
+  // 把 Steam/WhatsApp/Reddit 发给 hub 会变成“按该平台名义跑 Telegram 流程”的错平台 bug。
+  const run = sel.filter(isRunnablePlatform);
+  const preOnly = sel.filter(function (n) { return !isRunnablePlatform(n); });
+  if (!run.length) {
+    showFeedback("所选平台都不能由侧栏启动（仅预载／由计划任务执行）：" + sel.join("、"), "warn");
+    return;
+  }
   setRunBusy(true);
-  showFeedback("正在请求启动…（" + sel.join(" → ") + "）", "");
+  if (preOnly.length) {
+    showFeedback("实际启动：" + run.join(" → ") + "；" + preOnly.join("、") + " 仅预载／由计划任务执行（本轮不启动）", "warn");
+  } else {
+    showFeedback("正在请求启动…（" + run.join(" → ") + "）", "");
+  }
   let r = null;
-  try { r = await sendWithTimeout("start", START_TIMEOUT_MS, { platforms: sel, order: sel }); } catch (e) { r = { ok: false, error: "disconnected" }; }
+  try { r = await sendWithTimeout("start", START_TIMEOUT_MS, { platforms: run, order: run }); } catch (e) { r = { ok: false, error: "disconnected" }; }
   if (!r || !r.ok) {
     if (r && r.error === "timeout_pending") {
       showFeedback("启动请求超时，结果待确认（未自动重发）", "warn");
@@ -136,7 +151,7 @@ async function requestStart() {
       showFeedback("启动被拒绝：" + friendlyError(r), "bad");
     }
   } else {
-    showFeedback("已请求启动，后台开始执行", "ok");
+    showFeedback("已请求启动（" + run.join(" → ") + "）" + (preOnly.length ? "；" + preOnly.join("、") + " 仅预载／计划任务执行" : ""), "ok");
   }
   try { await refresh(); } catch (e) {} finally { setRunBusy(false); }
   return r;
@@ -554,6 +569,16 @@ const PLAT_ICO = { Facebook: "fb", Telegram: "tg", Discord: "dc", Reddit: "rd", 
   };
   function logoOf(p) { return LOGO_SVG[p] || ""; }
 
+// 侧栏能直接启动的平台：只限 hub 有页面执行器（background probe/search/join）的 Facebook / Telegram。
+// 其余平台（Discord/Reddit/WhatsApp/Steam）勾选只用于预载，或由 run_daily 的专用 runner 执行。
+const RUN_PLATFORMS = ["Telegram", "Facebook"];
+function isRunnablePlatform(name) {
+  return RUN_PLATFORMS.indexOf(String(name || "")) >= 0;
+}
+function runnablePlatforms() {
+  return selectedPlatforms().filter(isRunnablePlatform);
+}
+
 function selectedPlatforms() {
   const on = [];
   document.querySelectorAll('#platList input[type=checkbox]').forEach(function (b) {
@@ -568,17 +593,26 @@ function selectedPlatforms() {
 function syncPlatHint() {
   const hint = document.getElementById("platsHint");
   const on = selectedPlatforms();
+  const run = on.filter(isRunnablePlatform);
+  const preOnly = on.filter(function (n) { return !isRunnablePlatform(n); });
   if (hint) {
-    hint.textContent = on.length
-      ? ("已选 " + on.length + " 个 · 将按序运行：" + on.join(" → "))
-      : "未选平台（开始运行已禁用）";
+    if (!on.length) {
+      hint.textContent = "未选平台（预载与启动都需要先勾选）";
+    } else if (!run.length) {
+      hint.textContent = "已选 " + on.length + " 个 · 无可启动平台：" + on.join(" → ") + "（仅预载／由计划任务执行）";
+    } else {
+      hint.textContent = "已选 " + on.length + " 个 · 可启动：" + run.join(" → ") +
+        (preOnly.length ? " · 仅预载／计划任务：" + preOnly.join(" → ") : "");
+    }
   }
   const bs = document.getElementById("btnStart");
   if (bs) {
-    bs.disabled = (on.length === 0);
-    bs.title = on.length ? ("按序运行：" + on.join(" → ")) : "先在下方勾选平台，0 个不允许启动";
+    bs.disabled = (run.length === 0);
+    bs.title = run.length
+      ? ("按序启动：" + run.join(" → ") + (preOnly.length ? "；忽略仅预载平台：" + preOnly.join("、") : ""))
+      : "所选平台都没有手动执行器：只能预载或由计划任务执行";
   }
-  return on;
+  return run;
 }
 
 function renderPlats(c) {
@@ -590,12 +624,16 @@ function renderPlats(c) {
   list.innerHTML = plats.map(function (p) {
     const ico = PLAT_ICO[p] || "ms";
     const isRes = reserved.indexOf(String(p).toLowerCase()) >= 0;
-    const tag = isRes ? '<span class="tag">预留</span>' : (p === "Discord" ? '<span class="tag">只统计</span>' : '');
+    const off = pe[p] === false;
+    const tag = off ? '<span class="tag">后台未启用</span>'
+      : isRes ? '<span class="tag">预留</span>'
+      : isRunnablePlatform(p) ? '<span class="tag run">可启动</span>'
+      : '<span class="tag pre">仅预载／计划任务</span>';
     const on = pe[p] === true;
     return '<label class="plat" data-name="' + p + '"><input type="checkbox" data-p="' + p + '"' + (on ? ' checked' : '') + '><i class="ico ' + ico + '">' + logoOf(p) + '</i>' + p + tag + '</label>';
   }).join("");
   Array.prototype.forEach.call(list.querySelectorAll("input[data-p]"), function (inp) {
-    inp.onchange = savePlatforms;
+    inp.onchange = onPlatToggle;
   });
   syncPlatHint();
 }
@@ -609,19 +647,10 @@ async function loadPlatforms() {
   } catch (e) {}
 }
 
-async function savePlatforms() {
-  const list = $("#platList");
-  if (!list) return;
-  const out = {};
-  Array.prototype.forEach.call(list.querySelectorAll("input[data-p]"), function (inp) {
-    out[inp.getAttribute("data-p")] = !!inp.checked;
-  });
-  try {
-    await fetch(HUB + "/api/config", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ platformsEnabled: out })
-    });
-  } catch (e) {}
+// 侧栏勾选 = 本次运行的临时选择：只改本地复选框，绝不写回 hub 配置。
+// 平台启用/配额属于后台设置；侧栏写回会变成“一个人点选、全局生效”。
+function onPlatToggle() {
+  syncPlatHint();
 }
 
 // —— 可信状态栏：平台阶段与整轮证据分开，无证据一律未知 ——
@@ -839,6 +868,16 @@ async function refreshLive() {
   if (c) c.addEventListener("click", function () { requestClearStop(); });
 })();
 
+// 预载 / 重新检测 / 复制简报：与运行入口分开，预载永远不会启动运行
+(function () {
+  var p = document.getElementById("btnPreload");
+  if (p) p.addEventListener("click", function () { requestPreload(false); });
+  var rc = document.getElementById("btnRecheck");
+  if (rc) rc.addEventListener("click", function () { requestPreload(true); });
+  var cb = document.getElementById("btnCopyBrief");
+  if (cb) cb.addEventListener("click", copyBrief);
+})();
+
 // 「看板 ↗」：必须在扩展上下文里才能开标签页
 (function () {
   var b = document.getElementById("btnOpen");
@@ -886,6 +925,132 @@ async function loadLastRun() {
     document.getElementById("lrReason2").textContent = lrText;
   } catch (e) { }
 }
+// —— 预载：只开网页、验登录态，不启动运行；不能证明登录时一律显示「待确认」 ——
+function preloadEsc(s) {
+  return String(s == null ? "" : s).replace(/[<>&]/g, function (c) {
+    return { "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c];
+  });
+}
+
+function panelCore() {
+  return (typeof PanelCore !== "undefined" && PanelCore) ? PanelCore : null;
+}
+
+function preloadPickedOrWarn() {
+  const core = panelCore();
+  if (!core) { showFeedback("预载模块未加载（panel_core.js 缺失）", "bad"); return null; }
+  const names = selectedPlatforms();
+  if (!names.length) { showFeedback("先勾选平台，再预载（预载只打开网页，不启动运行）", "warn"); return null; }
+  const req = core.preloadRequest(names, false);
+  if (!req.platforms.length) {
+    const skip = core.unsupportedNames(names);
+    showFeedback("所选平台暂不支持预载" + (skip.length ? "：" + skip.join("、") : ""), "warn");
+    return null;
+  }
+  return { req: req, skip: core.unsupportedNames(names) };
+}
+
+function renderPreloadPending(keys) {
+  const core = panelCore();
+  const list = document.getElementById("preloadList");
+  const sum = document.getElementById("preloadSummary");
+  const at = document.getElementById("preloadAt");
+  if (sum) { sum.textContent = "预载中…"; sum.className = "live-pill"; }
+  if (at) at.textContent = "";
+  if (!list || !core) return;
+  list.innerHTML = (keys || []).map(function (k) {
+    const v = core.rowView({ key: k });
+    return '<li><span class="t">' + preloadEsc(v.name) + '</span><span class="m">预载中…</span></li>';
+  }).join("");
+}
+
+function renderPreloadRows(keys, rows, note) {
+  const core = panelCore();
+  if (!core) return;
+  const list = document.getElementById("preloadList");
+  const sum = document.getElementById("preloadSummary");
+  const at = document.getElementById("preloadAt");
+  const byKey = {};
+  (Array.isArray(rows) ? rows : []).forEach(function (r) {
+    if (r && r.key && !byKey[r.key]) byKey[r.key] = r;
+  });
+  const requested = (keys || []).map(function (k) { return byKey[k] || { key: k, error: "no_result" }; });
+  if (list) {
+    list.innerHTML = requested.map(function (r) {
+      const v = core.rowView(r);
+      const cls = v.code === "logged_in" ? "ok" : (v.code === "logged_out" ? "bad" : "");
+      const err = (v.code === "unknown" && v.error) ? '<span class="m"> · ' + preloadEsc(v.error) + '</span>' : "";
+      return '<li><span class="t">' + preloadEsc(v.name) + '</span>' +
+        '<span class="m ' + cls + '">' + preloadEsc(v.label) + '</span>' +
+        '<span class="m">' + preloadEsc(v.openText) + '</span>' + err + '</li>';
+    }).join("");
+  }
+  const s = core.preloadSummary(requested);
+  if (sum) { sum.textContent = s.text; sum.className = "live-pill"; }
+  PRELOAD_LAST_AT = Date.now();
+  if (at) at.textContent = "上次预载 " + hhmmss(PRELOAD_LAST_AT) + (note ? " · " + note : "");
+}
+
+async function requestPreload(recheck) {
+  if (RUN_BUSY) return;
+  const picked = preloadPickedOrWarn();
+  if (!picked) return;
+  const req = picked.req;
+  req.recheck = recheck === true;
+  const b1 = document.getElementById("btnPreload");
+  const b2 = document.getElementById("btnRecheck");
+  if (b1) { b1.disabled = true; b1.textContent = "预载中…"; }
+  if (b2) b2.disabled = true;
+  renderPreloadPending(req.platforms);
+  let r = null;
+  try { r = await sendWithTimeout("preload", PRELOAD_TIMEOUT_MS, { platforms: req.platforms, recheck: req.recheck }); }
+  catch (e) { r = { ok: false, error: "disconnected" }; }
+  if (b1) { b1.disabled = false; b1.textContent = "预载并检查登录态"; }
+  if (b2) b2.disabled = false;
+  if (!r || !r.ok) {
+    const why = (r && r.error === "timeout_pending") ? "预载超时，结果待确认" : ("预载失败：" + friendlyError(r));
+    renderPreloadRows(req.platforms, null, why);
+    showFeedback(why + "（未自动重发）", "warn");
+    return;
+  }
+  const rows = (r.data && r.data.results) || [];
+  if (!rows.length) {
+    renderPreloadRows(req.platforms, null, "扩展未返回结果");
+    showFeedback("预载未返回结果（扩展未响应）", "warn");
+    return;
+  }
+  renderPreloadRows(req.platforms, rows, "");
+  const text = panelCore() ? panelCore().preloadSummary(rows).text : "";
+  showFeedback("预载完成：" + text + (picked.skip.length ? "；未支持：" + picked.skip.join("、") : ""), "ok");
+}
+
+// 复制上次运行简报（保留简报文本 + 一键复制）
+async function copyBrief() {
+  const box = document.getElementById("lastrunbox");
+  const body = document.getElementById("lrReason2");
+  if (!box || box.style.display === "none" || !body) { showFeedback("还没有上次运行简报", "warn"); return; }
+  const pillEl = document.getElementById("lrOk");
+  const metaEl = document.getElementById("lrMeta2");
+  const payload = "上次运行 · " + (pillEl ? pillEl.textContent : "") + "\n" +
+    (metaEl ? metaEl.textContent : "") + "\n" + body.textContent;
+  let ok = false;
+  try { await navigator.clipboard.writeText(payload); ok = true; } catch (e) {}
+  if (!ok) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = payload;
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      ok = true;
+    } catch (e) {}
+  }
+  showFeedback(ok ? "简报已复制" : "复制失败：请手动选择简报文本", ok ? "ok" : "bad");
+}
+
 loadLastRun();
 setInterval(loadLastRun, 15000);
 setInterval(() => { loadSummary().then(refresh); }, 15000);

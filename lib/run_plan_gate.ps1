@@ -26,6 +26,7 @@ function Get-LedgerPendingTerminal($Ledger) {
   return $n
 }
 
+
 function Resolve-PlanAdvance {
   param(
     [string]$Outcome = "platform_complete",
@@ -65,6 +66,7 @@ function Set-LedgerNotExecuted($Ledger) {
   return $n
 }
 
+
 function Write-PlanHeartbeat([string]$BaseDir, [string]$RunId, [string]$Platform) {
   if (-not $RunId) { return $false }
   try {
@@ -94,3 +96,4 @@ function Set-LedgerUnconfirmed($Ledger) {
   }
   return $n
 }
+

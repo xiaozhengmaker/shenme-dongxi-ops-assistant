@@ -65,6 +65,12 @@
     <a class="btn" href="/users">成员样本</a>
   </div>
 
+  <div class="card" id="kwCard">
+    <h3>关键词与 AI 热点</h3>
+    <div class="sub">只读状态：关键词淘汰按平台统计；AI 建议只依据近期有日期、有来源的聚合信号，必须人工应用。设置入口在 <a href="/settings#s9">设置 · 关键词与 AI</a>。</div>
+    <div id="kwLine" class="muted">读取中…</div>
+  </div>
+
   <div class="card">
     <h3>你做什么</h3>
     <div class="sub">用一段话说清业务、目标市场、想拉的人、不要什么。分析结果只在页面里，点「应用」暂不开放。</div>
@@ -113,5 +119,31 @@
 </div>
 
 <script src="src_profile.js"></script>
+<script>
+(function () {
+  var HUB = 'http://127.0.0.1:8787';
+  var el = document.getElementById('kwLine');
+  if (!el) return;
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  fetch(HUB + '/api/kw/status', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+    if (!d || !d.ok) { el.textContent = '关键词状态读取失败：' + ((d && d.error) || 'unknown'); return; }
+    var s = d.status.summary || {};
+    var t = d.trend || {};
+    var ai = t.ai || {};
+    var b = t.budget || {};
+    var aiText = ai.configured ? ('AI 凭据已配置（' + (ai.masked || '****') + '）') : 'AI 凭据未配置（不会发起 AI 请求）';
+    el.innerHTML = '关键词共 <b>' + esc(s.total || 0) + '</b> 条：活跃 ' + esc(s.active || 0) +
+      '，休眠 ' + esc(s.sleep || 0) + '，保护 ' + esc(s.protected || 0) + '，手工淘汰 ' + esc(s.manual || 0) +
+      '。<br>' + esc(aiText) + '；本周' + (t.due ? '未生成' : '已生成') +
+      '；上次状态 ' + esc(t.last_status || '从未运行') +
+      '；预算 ' + esc(b.spent == null ? 0 : b.spent) + ' / ' + esc(b.limit == null ? 0 : b.limit) + ' CNY' +
+      (t.sources && t.sources.status ? '；热点源 ' + esc(t.sources.status) : '') + '。';
+  }).catch(function (e) { el.textContent = '关键词状态读取失败：' + e.message; });
+})();
+</script>
 </body>
 </html>

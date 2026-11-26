@@ -41,9 +41,36 @@ function Log($m) {
 
 $runId = "run_daily-" + (Get-Date).ToString("yyyyMMdd-HHmmss") + "-" + $PID
 $pipePath = Get-PipelineStatusPath -BaseDir $here
-$steps = @("hub", "Steam", "Reddit", "WhatsApp")
-$pipe = New-PipelineStatus -RunId $runId -Platforms $steps
+$cfg = $null
+try { $cfg = Get-Content (Join-Path $here "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
+$plats = @()
+try {
+  if ($cfg -and $cfg.platforms) {
+    foreach ($p in @($cfg.platforms)) {
+      $enabled = $true
+      try { if ($cfg.platformsEnabled -and $cfg.platformsEnabled.PSObject.Properties.Name -contains $p) { $enabled = [bool]$cfg.platformsEnabled.$p } } catch { }
+      if ($enabled) { $plats += [string]$p }
+    }
+  }
+} catch { }
+if (@($plats).Count -eq 0) { $plats = @("Facebook", "Telegram", "Reddit", "WhatsApp", "Steam") }
+$script:plats = @($plats)
+$script:rcPlatforms = @(@($plats) + @("Steam", "Reddit", "WhatsApp") | Select-Object -Unique)
+$phases = @("hub", "Steam", "Reddit", "WhatsApp")
+$pipe = New-PipelineStatus -RunId $runId -Platforms $plats -Phases $phases -Total $phases.Count
 $script:runRegistered = $false
+$global:GOPS_DAILY = @{ BaseDir = $here; RunId = $runId; Done = $false }
+Register-EngineEvent -SourceIdentifier PowerShell.Exiting -SupportEvent -Action {
+  try {
+    $g = $global:GOPS_DAILY
+    if ($g) {
+      . (Join-Path $g.BaseDir "lib\run_control.ps1")
+      . (Join-Path $g.BaseDir "lib\pipeline_status.ps1")
+      Close-RunControl -BaseDir $g.BaseDir -RunId $g.RunId -State "stopped" -OnlyIfRunning | Out-Null
+      Close-PipelineStatusForRun -BaseDir $g.BaseDir -RunId $g.RunId -State "failed" -Error "aborted" -OnlyIfRunning | Out-Null
+    }
+  } catch { }
+} | Out-Null
 function Set-Pipe([string]$current, [string]$next, [string]$state, [string]$err, $completed) {
   try {
     $pipe.updated_at = (Get-Date).ToString("o")
@@ -53,7 +80,7 @@ function Set-Pipe([string]$current, [string]$next, [string]$state, [string]$err,
     if ($err) { $pipe.last_error = $err }
     if ($completed -ne $null) { $pipe.completed = [int]$completed }
     Save-PipelineStatus -Path $pipePath -Status $pipe
-    if ($script:runRegistered -and $current) { Update-RunControlPlatform -BaseDir $here -RunId $runId -Current $current | Out-Null }
+    if ($script:runRegistered -and $current -and ($script:rcPlatforms -contains $current)) { Update-RunControlPlatform -BaseDir $here -RunId $runId -Current $current | Out-Null }
   } catch { }
 }
 function Stop-Now([string]$where) {
@@ -72,6 +99,8 @@ function Stop-Now([string]$where) {
     $null = Write-RunSummary -BaseDir $here -RunId $script:runId -StartedAt $script:pipe.started_at -Ok $false -Code "stopped" -Reason $rep.summary -Reasons @($rep.lines) -Platforms @($rp) -Extra @{ report = @($rep.lines); report_text = $rep.text; platform_results = $rep.results; late_receipts = [int]$script:lateCount }
   } catch { Log ("stop summary failed: " + $_.Exception.Message) }
   Close-RunControl -BaseDir $here -RunId $runId -State "stopped" | Out-Null
+  try { Close-PipelineStatusForRun -BaseDir $here -RunId $runId -State "stopped" -OnlyIfRunning | Out-Null } catch { }
+  if ($global:GOPS_DAILY) { $global:GOPS_DAILY.Done = $true }
   Log ("stop signal -> 停在 " + $where)
   exit 0
 }
@@ -88,27 +117,15 @@ function Wait-Signal([string]$platform, [int]$seconds) {
 
 Set-Pipe "hub" "Steam" "running" "" 0
 if (Test-GOpsStop $here) { Stop-Now "startup" }
-$reg = Register-RunControl -BaseDir $here -RunId $runId -Platforms $steps -Current "hub"
+$reg = Register-RunControl -BaseDir $here -RunId $runId -Platforms $plats -Current "hub" -OwnerPid $PID -OwnerKind "run_daily"
 if (-not $reg.ok) {
   Log ("skip run: " + $reg.reason + " existing=" + [string]$reg.run_id)
+  Close-PipelineStatusForRun -BaseDir $here -RunId $runId -State "stopped" -Error ("already_running: " + [string]$reg.run_id) -OnlyIfRunning | Out-Null
   exit 0
 }
 $script:runRegistered = $true
 $env:GOPS_RUN_ID = $runId
 Log ("run " + $runId + " start")
-
-$cfg = $null
-try { $cfg = Get-Content (Join-Path $here "config.json") -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
-$plats = @()
-try {
-  if ($cfg -and $cfg.platforms) {
-    foreach ($p in @($cfg.platforms)) {
-      $enabled = $true
-      try { if ($cfg.platformsEnabled -and $cfg.platformsEnabled.PSObject.Properties.Name -contains $p) { $enabled = [bool]$cfg.platformsEnabled.$p } } catch { }
-      if ($enabled) { $plats += [string]$p }
-    }
-  }
-} catch { }
 
 $alive = $false
 if ($env:GOPS_OFFLINE -ne "1") {
@@ -124,17 +141,23 @@ if ($env:GOPS_OFFLINE -ne "1") {
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
       "-File", (Join-Path $here "hub.ps1")
     ) -WindowStyle Hidden
-    $sig = Wait-Signal "hub" 10
-    if ($sig -eq "stop" -or (Stop-Requested)) { Stop-Now "hub-start" }
+    $ready = $false
+    $deadline = (Get-Date).AddSeconds(30)
+    while ((Get-Date) -lt $deadline) {
+      if (Stop-Requested) { Stop-Now "hub-start" }
+      try { Invoke-RestMethod "http://127.0.0.1:8787/health" -TimeoutSec 3 | Out-Null; $ready = $true; break } catch { Start-Sleep -Seconds 1 }
+    }
+    if (-not $ready) { Log "hub did not become healthy within 30s; continuing" }
   }
 } else {
   Log "hub probe skipped (offline test)"
 }
 
-# 1) hub 平台（仅 Facebook/Telegram/Reddit；每平台独立一轮，逐平台等待完成）
+# 1) hub 平台（仅 Facebook/Telegram；每平台独立一轮，逐平台等待完成）；
+#    Reddit 由下面的 rd_run.ps1 专用 runner 执行，不进 hub 轮。
 Set-Pipe "hub" "Steam" "running" "" 0
 $env:GOPS_PLATFORM = "hub"
-$hubPlats = @("Facebook", "Telegram", "Reddit")
+$hubPlats = @("Facebook", "Telegram")
 $hubResults = @{}
 $lateCount = 0
 $stateReport = ""
@@ -144,11 +167,13 @@ $finalCode = "complete"
 $stopReason = ""
 foreach ($p in $hubPlats) {
   if (Stop-Requested) { $finalCode = "stopped"; $stopReason = "收到本轮停止信号"; break }
-  if (Skip-Requested "hub") { Log "skip platform hub"; break }
+  try { Update-RunControlPlatform -BaseDir $here -RunId $runId -Current $p | Out-Null } catch { }
+  if (Skip-Requested $p) { Log ("skip " + $p); $finalCode = "partial_complete"; continue }
   $q = 0
   try { if ($cfg.quotas.PSObject.Properties.Name -contains $p) { $q = [int]$cfg.quotas.$p } } catch { }
   if ($q -le 0) { Log ("skip " + $p + " (quota 0)"); continue }
   $hubState = $null
+  $skippedNow = $false
   try {
     $body = @{ action = "start"; platform = $p; run_id = $runId } | ConvertTo-Json -Compress
     Invoke-RestMethod "http://127.0.0.1:8787/control" -Method Post -ContentType "application/json" -Body $body -TimeoutSec 15 | Out-Null
@@ -156,12 +181,32 @@ foreach ($p in $hubPlats) {
     $deadline = (Get-Date).AddMinutes(30)
     while ((Get-Date) -lt $deadline) {
       if (Stop-Requested) { break }
+      if (Skip-Requested $p) {
+        $skippedNow = $true
+        try { $bodySkip = @{ action = "skip_platform"; platform = $p; run_id = $runId } | ConvertTo-Json -Compress; Invoke-RestMethod "http://127.0.0.1:8787/control" -Method Post -ContentType "application/json" -Body $bodySkip -TimeoutSec 10 | Out-Null } catch { }
+        $skipDeadline = (Get-Date).AddSeconds(180)
+        while ((Get-Date) -lt $skipDeadline) {
+          if (Stop-Requested) { break }
+          try { $hubState = Invoke-RestMethod "http://127.0.0.1:8787/state" -TimeoutSec 5 } catch { Start-Sleep -Seconds 1; continue }
+          if (-not [bool]$hubState.running) { break }
+          Start-Sleep -Seconds 1
+        }
+        break
+      }
       try { $hubState = Invoke-RestMethod "http://127.0.0.1:8787/state" -TimeoutSec 5 } catch { Start-Sleep -Seconds 2; continue }
       if ([string]$hubState.run_id -and [string]$hubState.run_id -ne $runId) { Log ("hub run mismatch: " + [string]$hubState.run_id); break }
       if (-not [bool]$hubState.running) { break }
       Start-Sleep -Seconds 2
     }
   } catch { Log ("start failed: " + $_.Exception.Message) }
+  if (-not $hubState) {
+    try { $b = @{ action = "stop"; cleanup = $true; run_id = $runId } | ConvertTo-Json -Compress; Invoke-RestMethod "http://127.0.0.1:8787/control" -Method Post -ContentType "application/json" -Body $b -TimeoutSec 10 | Out-Null } catch { }
+    Stop-Now "hub unavailable"
+  }
+  if ([bool]$hubState.running) {
+    try { $b = @{ action = "stop"; cleanup = $true; run_id = $runId } | ConvertTo-Json -Compress; Invoke-RestMethod "http://127.0.0.1:8787/control" -Method Post -ContentType "application/json" -Body $b -TimeoutSec 10 | Out-Null } catch { }
+    Stop-Now "hub timeout"
+  }
   if ($hubState) {
     $ps = $null
     try { $ps = $hubState.platformStats.$p } catch { }
@@ -170,15 +215,21 @@ foreach ($p in $hubPlats) {
     try { $lateCount = [Math]::Max($lateCount, [int]$hubState.late_receipts) } catch { }
     if ([string]$ps.result -eq "未运行" -or [string]$ps.result -eq "进行中") { $ps.result = "完成" }
     if ([string]$ps.result -eq "部分完成（已停止新派发）") { $finalCode = "partial_complete" }
+    if ($skippedNow) { $ps.result = "已跳过"; $finalCode = "partial_complete" }
     $hubResults[$p] = $ps
     Log ("hub " + $p + " done result=" + $ps.result + " joined=" + $ps.joined + " existing=" + $ps.existing + " unconfirmed=" + $ps.unconfirmed + " failed=" + $ps.failed)
+    if ($skippedNow -and [bool]$hubState.running) {
+      try { $bs = @{ action = "stop"; cleanup = $true; run_id = $runId } | ConvertTo-Json -Compress; Invoke-RestMethod "http://127.0.0.1:8787/control" -Method Post -ContentType "application/json" -Body $bs -TimeoutSec 10 | Out-Null } catch { }
+      Stop-Now "hub-skip-timeout"
+    }
   } else {
+    if ($skippedNow) { Stop-Now "hub-skip-unknown" }
     $hubResults[$p] = New-PlatformResult -Platform $p -Result "失败" -Reason "hub 未返回状态"
     $finalCode = "partial_complete"
   }
   if (Stop-Requested) { $finalCode = "stopped"; $stopReason = "收到本轮停止信号"; break }
-  if (Skip-Requested "hub") { Log "skip platform hub"; break }
 }
+if ($finalCode -eq "stopped") { Stop-Now "hub" }
 Set-Pipe "Steam" "Reddit" "running" "" 1
 
 # 2) Steam
@@ -186,6 +237,7 @@ $env:GOPS_PLATFORM = "Steam"
 $steamOn = $false
 try { $steamOn = [bool]$cfg.behaviors.Steam.join } catch { }
 if ($steamOn) {
+  Set-Pipe "Steam" "Reddit" "running" "" 1
   $sq = Join-Path $here "data\steam_queue.txt"
   $sn = 0
   try { $sn = [int]$cfg.quotas.Steam } catch { }
@@ -240,6 +292,7 @@ $env:GOPS_PLATFORM = "WhatsApp"
 $waOn = $false
 try { $waOn = [bool]$cfg.behaviors.WhatsApp.join } catch { }
 if ($waOn) {
+  if (Stop-Requested) { Stop-Now "WhatsApp" }
   $wn = 0
   try { $wn = [int]$cfg.quotas.WhatsApp } catch { }
   $waPlan = $null
@@ -254,7 +307,9 @@ if ($waOn) {
     try { $whitelist = [string]$waPlan.publisher_whitelist } catch { }
     try { $allowJoin = [bool]$waPlan.allow_join } catch { }
   }
-  if (-not $targetCode -or -not $publisher) {
+  if (Skip-Requested "WhatsApp") {
+    Log "skip platform WhatsApp"
+  } elseif (-not $targetCode -or -not $publisher) {
     Log "whatsapp skipped: no explicit wa.one_shot target (daily never auto-clicks)"
   } elseif ($wn -le 0) {
     Log "skip WhatsApp (quota 0)"
@@ -284,9 +339,22 @@ if ($waOn) {
   }
 }
 
+# --- keyword evolution weekly (best-effort; never blocks the daily round) ---
+if ($env:GOPS_OFFLINE -ne "1" -and -not (Stop-Requested)) {
+  try {
+    $kwOut = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here "kw_weekly.ps1") -Weekly -BaseDir $here 2>&1
+    $kwExit = $LASTEXITCODE
+    $kwText = @($kwOut | ForEach-Object { [string]$_ }) -join "`r`n"
+    Add-Content -LiteralPath $log -Value ("[" + (Get-Date).ToString("s") + "] kw_evolve exit=" + $kwExit + "`r`n" + $kwText) -Encoding UTF8
+    Log ("kw_evolve weekly exit=" + $kwExit)
+  } catch {
+    Log ("kw_evolve weekly failed: " + $_.Exception.Message)
+  }
+}
 if (Stop-Requested) { $finalCode = "stopped"; $stopReason = "收到本轮停止信号" }
-Complete-RunControl -BaseDir $here -RunId $runId | Out-Null
-Set-Pipe "" "" $(if ($finalCode -eq "complete") { "complete" } else { $finalCode }) "" $steps.Count
+if ($finalCode -eq "complete") { Complete-RunControl -BaseDir $here -RunId $runId | Out-Null }
+else { Close-RunControl -BaseDir $here -RunId $runId -State "stopped" | Out-Null }
+Set-Pipe "" "" $finalCode "" $phases.Count
 try {
   . (Join-Path $here "lib\run_summary.ps1")
   $rsReasons = @(Get-RunReasonFromLog -LogPath $log -Tail 600)
@@ -299,5 +367,6 @@ try {
   $rep = New-RoundReport -Plan $reportPlan -Results $reportResults -StartedAt $pipe.started_at -EndedAt (Get-Date) -Code $finalCode -StopReason $stopReason -LateCount $lateCount -RunId $runId
   $null = Write-RunSummary -BaseDir $here -RunId $runId -StartedAt $pipe.started_at -Ok $rsOk -Code $finalCode -Reason $rep.summary -Reasons @($rep.lines) -Platforms @($reportPlan) -Extra @{ report = @($rep.lines); report_text = $rep.text; platform_results = $rep.results; late_receipts = [int]$lateCount }
 } catch { Log ("run summary failed: " + $_.Exception.Message) }
+$global:GOPS_DAILY.Done = $true
 Log "run_daily complete"
 exit 0

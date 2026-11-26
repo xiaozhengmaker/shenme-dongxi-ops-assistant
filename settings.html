@@ -66,6 +66,7 @@
       <a href="#s6" data-k="output notify 通知 飞书 日报 webhook"><span class="ic">📤</span>结果发哪里<span class="en">输出</span></a>
       <a href="#s7" data-k="system path chrome db log 系统 维护"><span class="ic">⚙️</span>系统与维护<span class="en">系统</span></a>
       <a href="#s8" data-k="member sample 成员 样本 采集 采样 上限 telegram steam"><span class="ic">👥</span>读成员样本<span class="en">样本</span></a>
+      <a href="#s9" data-k="keyword kw 关键词 淘汰 休眠 保护 ai 热点 建议 趋势"><span class="ic">📈</span>关键词与 AI<span class="en">进化</span></a>
     </nav>
 
     <div>
@@ -162,6 +163,44 @@
         <div id="msProg" style="margin-top:14px"></div>
         <div class="row" style="margin-top:10px"><button class="btn" id="msSave">保存采样设置</button><button class="btn ghost" id="msRefresh" style="margin-left:8px">刷新进度</button><span class="muted" id="msMsg"></span></div>
         <div class="muted" style="margin-top:6px">说明：上限 0 表示「本轮不限，读到没有待采为止」；预算到点会提前停。Telegram 建议 3 分钟/群，Steam 15 分钟/群（全量 XML 分页）。</div>
+      </section>
+
+      <section class="pane" id="s9" style="margin-top:16px">
+        <h2>📈 关键词与 AI 热点</h2>
+        <div class="sub">按平台分别统计有效搜索：连续 3 个<strong>不同轮</strong>零结果休眠 24h，再 3 轮休眠 7 天；错误/未知结果不计入；保护词与手工淘汰优先；全部休眠时本轮不回退旧词。AI 每周只依据近期「有日期、有来源」的聚合信号，最多给 5 条建议，必须人工应用，可按批回滚。</div>
+        <div class="row">
+          <select class="inp" id="kwPlat" style="max-width:220px"><option value="">全部平台</option></select>
+          <button class="btn" id="kwRefresh" type="button">刷新</button>
+          <span class="muted" id="kwMsg"></span>
+        </div>
+        <div class="row" id="kwSummary" style="margin-top:8px"></div>
+        <div style="overflow:auto;max-height:430px;margin-top:10px">
+          <table>
+            <thead><tr><th>平台</th><th>关键词</th><th>状态</th><th>有效轮</th><th>命中/零/错误</th><th>连续零</th><th>休眠至</th><th>操作</th></tr></thead>
+            <tbody id="kwRows"></tbody>
+          </table>
+        </div>
+        <div class="muted" style="margin-top:6px">保护 = 不自动休眠；淘汰 = 不再参与搜索，需手工恢复；恢复 = 清除休眠/淘汰并重新参与排序。全休眠不会退回旧词，平台会如实显示无可搜词。</div>
+
+        <details open style="margin-top:14px">
+          <summary>AI 周报策略与预算</summary>
+          <div class="row" style="margin-top:10px">
+            <label class="muted"><input type="checkbox" id="kwAiEnabled"> 启用 AI 建议</label>
+            <label class="muted">观察窗口 <input class="inp" id="kwWindow" type="number" min="1" max="90" style="width:80px" disabled> 天</label>
+            <label class="muted">每周预算 <input class="inp" id="kwBudget" type="number" min="0" step="0.1" style="width:100px"> CNY</label>
+            <label class="muted">最多建议 <input class="inp" id="kwMaxSug" type="number" min="1" max="5" style="width:70px"></label>
+            <button class="btn" id="kwPolicySave" type="button">保存策略</button>
+            <span class="muted" id="kwPolicyMsg"></span>
+          </div>
+          <div class="muted">默认规则：连续零 3 轮 → 24h；再 3 轮 → 168h（可在 config.kw_evolve 调整）。不会因为某个平台全休眠而回退旧词。</div>
+        </details>
+
+        <div id="kwAiState" style="margin-top:14px"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn primary" id="kwGen" type="button">生成本周建议</button>
+          <span class="muted" id="kwGenMsg"></span>
+        </div>
+        <div id="kwBatches" style="margin-top:12px"></div>
       </section>
     </div>
   </div>
@@ -395,6 +434,288 @@
     }).catch(function (e) { q("msMsg").textContent = "保存失败：" + e.message; });
   };
   load();
+})();
+</script>
+<script>
+(function () {
+  var HUB = 'http://127.0.0.1:8787';
+  var PLAT = '';
+  var LAST = null;
+  function q(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function tagClass(state) {
+    if (state === 'active') return 'ok';
+    if (state === 'sleep' || state === 'manual') return 'wait';
+    return '';
+  }
+  function stateText(state) {
+    var m = { active: '活跃', sleep: '休眠', manual: '手工淘汰', protected: '保护' };
+    return m[state] || state || '—';
+  }
+  function fmt(s) {
+    if (!s) return '—';
+    return String(s).replace('T', ' ').slice(0, 16);
+  }
+  function statusText(s) {
+    var m = {
+      suggested: '待人工应用', applied: '已应用', rolled_back: '已回滚', no_changes: '无变化',
+      no_key: '未配置 AI Key', no_signals: '没有有日期有来源的信号', budget_exceeded: '超出本周预算',
+      not_due: '本周已运行', ai_disabled: 'AI 已关闭', disabled: '已关闭', ai_error: 'AI 调用失败',
+      ai_invalid: 'AI 返回不可解析', no_suggestions: 'AI 未给出建议', busy: '生成中', no_config: '缺少 config'
+    };
+    return m[s] || s || '未知';
+  }
+  function api(path, opts) {
+    return fetch(HUB + path, opts || {}).then(function (r) {
+      return r.json().catch(function () { return {}; });
+    });
+  }
+  function post(path, body) {
+    return api(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(body || {})
+    });
+  }
+  function setMsg(id, text, bad) {
+    var e = q(id);
+    if (!e) return;
+    e.textContent = text || '';
+    e.style.color = bad ? '#b91c1c' : '#0f766e';
+  }
+  function sourceText(s) {
+    var srcs = (s && s.sources) || [];
+    if (srcs.length) {
+      return srcs.map(function (x) {
+        var bits = [];
+        if (x.title) bits.push(String(x.title));
+        if (x.url) bits.push(String(x.url));
+        if (x.ts) bits.push(String(x.ts));
+        if (x.source_id) bits.push('sid=' + String(x.source_id));
+        if (!bits.length) bits.push(String(x.key || ''));
+        return bits.join(' | ');
+      }).join('; ');
+    }
+    var ids = s && s.source_ids;
+    if (!ids || !ids.length) return '无来源（将被拒绝）';
+    return ids.map(function (x) { return String(x); }).join(', ');
+  }
+  function paintSummary(st) {
+    var s = (st && st.summary) || {};
+    var errs = 0;
+    (st.keywords || []).forEach(function (k) { if (k.errors > 0) errs++; });
+    q('kwSummary').innerHTML =
+      '<span class="tag ok">活跃 ' + esc(s.active || 0) + '</span>' +
+      '<span class="tag wait">休眠 ' + esc(s.sleep || 0) + '</span>' +
+      '<span class="tag wait">手工淘汰 ' + esc(s.manual || 0) + '</span>' +
+      '<span class="tag">保护 ' + esc(s.protected || 0) + '</span>' +
+      '<span class="tag">有过错误 ' + esc(errs) + '</span>' +
+      '<span class="muted">共 ' + esc(s.total || 0) + ' 个词</span>';
+  }
+  function paintRows(st) {
+    var rows = (st && st.keywords) || [];
+    if (!rows.length) {
+      q('kwRows').innerHTML = '<tr><td colspan="8" class="muted">暂无统计。运行搜索后才会产生关键词记录。</td></tr>';
+      return;
+    }
+    q('kwRows').innerHTML = rows.map(function (k) {
+      var actions = '';
+      if (k.state === 'protected') {
+        actions += '<button class="btn" data-act="unprotect" type="button">取消保护</button> ';
+      } else {
+        actions += '<button class="btn" data-act="protect" type="button">保护</button> ';
+      }
+      if (k.state === 'manual') {
+        actions += '<button class="btn" data-act="recover" type="button">恢复</button> ';
+      } else {
+        actions += '<button class="btn" data-act="prune" type="button">淘汰</button> ';
+      }
+      if (k.state === 'sleep') {
+        actions += '<button class="btn" data-act="recover" type="button">恢复</button> ';
+      } else {
+        actions += '<button class="btn" data-act="sleep" type="button">休眠24h</button>';
+      }
+      return '<tr data-pl="' + esc(k.platform) + '" data-kw="' + esc(k.keyword) + '">' +
+        '<td>' + esc(k.platform) + '</td>' +
+        '<td>' + esc(k.keyword) + '</td>' +
+        '<td><span class="tag ' + tagClass(k.state) + '">' + esc(stateText(k.state)) + '</span></td>' +
+        '<td>' + esc(k.rounds) + '</td>' +
+        '<td>' + esc(k.hits) + ' / ' + esc(k.misses) + ' / ' + esc(k.errors) + '</td>' +
+        '<td>' + esc(k.zero_streak) + '</td>' +
+        '<td class="muted">' + esc(k.sleep_until ? (fmt(k.sleep_until) + '（' + k.sleep_remaining_hours + 'h）') : '—') + '</td>' +
+        '<td style="white-space:nowrap">' + actions + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+  function paintPolicy(st) {
+    var p = (st && st.policy) || {};
+    q('kwAiEnabled').checked = !!p.ai_enabled;
+    if (document.activeElement !== q('kwWindow')) q('kwWindow').value = p.ai_window_days == null ? 14 : p.ai_window_days;
+    if (document.activeElement !== q('kwBudget')) q('kwBudget').value = p.ai_weekly_budget_cny == null ? 1 : p.ai_weekly_budget_cny;
+    if (document.activeElement !== q('kwMaxSug')) q('kwMaxSug').value = p.ai_max_suggestions == null ? 5 : p.ai_max_suggestions;
+  }
+  function paintAi(st) {
+    var t = (st && st.trend) || {};
+    var ai = t.ai || {};
+    var b = t.budget || {};
+    var src = t.sources || {};
+    var html = '<div class="row">' +
+      '<span class="tag ' + (ai.configured ? 'ok' : 'wait') + '">' + (ai.configured ? ('凭据已配置 · ' + esc(ai.masked)) : '凭据未配置') + '</span>' +
+      '<span class="tag">' + (t.due ? '本周未生成' : '本周已生成') + '</span>' +
+      '<span class="tag">上次：' + esc(statusText(t.last_status)) + '</span>' +
+      '<span class="muted">预算 ' + esc(b.spent == null ? 0 : b.spent) + ' / ' + esc(b.limit == null ? 0 : b.limit) + ' CNY</span>' +
+      (t.signals_count != null ? '<span class="muted">信号 ' + esc(t.signals_count) + '</span>' : '') +
+      '</div>';
+    if (src.status) {
+      html += '<div class="row" style="margin-top:6px">' +
+        '<span class="tag ' + (src.status === 'ok' ? 'ok' : (src.status === 'unavailable' || src.status === 'not_cs2' ? 'wait' : '')) + '">热点源：' + esc(src.status) + '</span>' +
+        (src.steam_status ? '<span class="muted">Steam：' + esc(src.steam_status) + '</span>' : '') +
+        (src.entries_status ? '<span class="muted">条目：' + esc(src.entries_status) + '</span>' : '') +
+        '</div>';
+      if (src.warnings && src.warnings.length) html += '<div class="muted" style="margin-top:6px;color:#b45309">' + esc(src.warnings[0]) + '</div>';
+    }
+    if (t.last_error) {
+      html += '<div class="muted" style="margin-top:6px;color:#b45309">上次错误：' + esc(t.last_error) + '</div>';
+    }
+    if (!ai.configured) {
+      html += '<div class="muted" style="margin-top:6px">未配置 AI Key：只会显示状态，不会发起 AI 请求。可到上方「AI 怎么帮忙」填写 Key。</div>';
+    }
+    q('kwAiState').innerHTML = html;
+    q('kwGen').disabled = false;
+    if (!ai.configured) q('kwGen').disabled = true;
+  }
+  function paintBatches(st) {
+    var t = (st && st.trend) || {};
+    var list = t.batches || [];
+    if (!list.length) {
+      q('kwBatches').innerHTML = '<div class="muted">暂无建议批次。生成后这里显示来源、应用与回滚。</div>';
+      return;
+    }
+    q('kwBatches').innerHTML = list.slice(0, 6).map(function (b) {
+      var acts = '';
+      if (b.status === 'suggested') acts = '<button class="btn primary" data-batch="' + esc(b.id) + '" data-batch-act="apply" type="button">应用整批</button>';
+      if (b.status === 'applied') acts = '<button class="btn" data-batch="' + esc(b.id) + '" data-batch-act="rollback" type="button">按批回滚</button>';
+      var items = (b.suggestions || []).map(function (s) {
+        return '<div style="border-top:1px dashed #e6e8eb;padding:7px 0">' +
+          '<b>[' + esc(s.action) + ']</b> ' + esc(s.platform) + ' / ' + esc(s.keyword) +
+          ' <span class="muted">' + esc(s.reason || '') + '</span>' +
+          '<div class="muted">来源：' + esc(sourceText(s)) + '</div></div>';
+      }).join('');
+      return '<div class="prompt" style="margin-top:8px">' +
+        '<div class="h">批次 ' + esc(b.id) + ' <span class="tag ' + (b.status === 'applied' ? 'ok' : (b.status === 'suggested' ? 'wait' : '')) + '">' + esc(statusText(b.status)) + '</span>' +
+        '<span class="muted" style="margin-left:auto">' + esc(fmt(b.created_at)) + '</span></div>' +
+        items + '<div class="row" style="margin-top:8px">' + acts + '</div></div>';
+    }).join('');
+  }
+  function loadStatus() {
+    var path = '/api/kw/status';
+    if (PLAT) path += '?platform=' + encodeURIComponent(PLAT);
+    api(path, { cache: 'no-store' }).then(function (d) {
+      if (!d || !d.ok) {
+        setMsg('kwMsg', '读取失败：' + ((d && d.error) || 'unknown'), true);
+        return;
+      }
+      LAST = d;
+      var sel = q('kwPlat');
+      if (sel.options.length <= 1 && !PLAT) {
+        var seen = {};
+        (d.status.keywords || []).forEach(function (k) {
+          if (!k.platform || seen[k.platform]) return;
+          seen[k.platform] = 1;
+          var o = document.createElement('option');
+          o.value = k.platform; o.textContent = k.platform; sel.appendChild(o);
+        });
+      }
+      paintSummary(d.status);
+      paintRows(d.status);
+      paintPolicy(d);
+      paintAi(d);
+      paintBatches(d);
+      setMsg('kwMsg', '已刷新 ' + fmt(d.status.generated_at));
+    }).catch(function (e) {
+      setMsg('kwMsg', '读取失败：' + e.message, true);
+    });
+  }
+  function action(plat, kw, act) {
+    var labels = { protect: '保护', unprotect: '取消保护', prune: '手工淘汰', recover: '恢复', sleep: '休眠 24h' };
+    if (act === 'prune' && !confirm('确认手工淘汰「' + kw + '」？淘汰后需手工恢复。')) return;
+    setMsg('kwMsg', '处理中…');
+    var body = { platform: plat, keyword: kw, action: act };
+    if (act === 'sleep') body.hours = 24;
+    post('/api/kw/action', body).then(function (d) {
+      if (!d || !d.ok) { setMsg('kwMsg', '操作失败：' + ((d && d.error) || 'unknown'), true); return; }
+      setMsg('kwMsg', '已' + (labels[act] || act) + '：' + kw);
+      loadStatus();
+    }).catch(function (e) { setMsg('kwMsg', '操作失败：' + e.message, true); });
+  }
+  function applyBatch(id, act) {
+    var word = act === 'apply' ? '应用' : '回滚';
+    if (!confirm('确认' + word + '批次 ' + id + '？')) return;
+    setMsg('kwGenMsg', word + '中…');
+    post('/api/kw/trend/' + act, { batch_id: id }).then(function (d) {
+      if (!d || !d.ok) { setMsg('kwGenMsg', word + '失败：' + ((d && (d.error || d.status)) || 'unknown'), true); return; }
+      setMsg('kwGenMsg', '批次已' + word + '：' + id);
+      loadStatus();
+    }).catch(function (e) { setMsg('kwGenMsg', word + '失败：' + e.message, true); });
+  }
+  q('kwRefresh').onclick = function () { loadStatus(); };
+  q('kwPlat').onchange = function () { PLAT = this.value; loadStatus(); };
+  q('kwRows').onclick = function (e) {
+    var b = e.target;
+    if (!b || b.tagName !== 'BUTTON') return;
+    var tr = b.parentNode;
+    while (tr && tr.tagName !== 'TR') tr = tr.parentNode;
+    if (!tr) return;
+    action(tr.getAttribute('data-pl'), tr.getAttribute('data-kw'), b.getAttribute('data-act'));
+  };
+  q('kwBatches').onclick = function (e) {
+    var b = e.target;
+    if (!b || b.tagName !== 'BUTTON') return;
+    var id = b.getAttribute('data-batch');
+    var act = b.getAttribute('data-batch-act');
+    if (id && act) applyBatch(id, act);
+  };
+  q('kwGen').onclick = function () {
+    var t = (LAST && LAST.trend) || {};
+    var force = false;
+    if (t.due === false) {
+      if (!confirm('本周已生成过建议。仍要强制重跑一次？会消耗 AI 预算。')) return;
+      force = true;
+    }
+    setMsg('kwGenMsg', '正在提交后台生成…');
+    post('/api/kw/trend/generate', { force: force }).then(function (d) {
+      if (!d || !d.ok) {
+        setMsg('kwGenMsg', statusText(d && d.status) + (d && d.message ? '：' + d.message : ''), true);
+        loadStatus();
+        return;
+      }
+      if (d.status === 'queued' || d.status === 'running') {
+        setMsg('kwGenMsg', d.status === 'running' ? '已有后台生成在运行，稍后刷新。' : '已提交后台生成，稍后刷新；不会阻塞 Hub。');
+        setTimeout(loadStatus, 5000);
+        return;
+      }
+      setMsg('kwGenMsg', '已生成 ' + ((d.suggestions || []).length) + ' 条建议；请检查来源后手工应用');
+      loadStatus();
+    }).catch(function (e) { setMsg('kwGenMsg', '生成失败：' + e.message, true); });
+  };
+  q('kwPolicySave').onclick = function () {
+    setMsg('kwPolicyMsg', '保存中…');
+    post('/api/kw/policy', {
+      ai_enabled: q('kwAiEnabled').checked,
+      ai_window_days: parseInt(q('kwWindow').value || '14', 10),
+      ai_weekly_budget_cny: parseFloat(q('kwBudget').value || '0'),
+      ai_max_suggestions: parseInt(q('kwMaxSug').value || '5', 10)
+    }).then(function (d) {
+      if (!d || !d.ok) { setMsg('kwPolicyMsg', '保存失败：' + ((d && d.error) || 'unknown'), true); return; }
+      setMsg('kwPolicyMsg', '已保存');
+      loadStatus();
+    }).catch(function (e) { setMsg('kwPolicyMsg', '保存失败：' + e.message, true); });
+  };
+  loadStatus();
 })();
 </script>
 </body>
